@@ -16,6 +16,47 @@ describe('POST /tasks/bulk-score', () => {
   });
 
   context('all', () => {
+    it('throws an error on empty task id', async () => {
+      await expect(user.post('/tasks/bulk-score', [{ id: '', direction: 'up' }]))
+        .to.eventually.be.rejected.and.to.eql({
+          code: 400,
+          error: 'BadRequest',
+          message: 'Invalid request parameters.',
+        });
+    });
+
+    it('throws an error on invalid direction', async () => {
+      await expect(user.post('/tasks/bulk-score', [{ id: '1', direction: 'left' }]))
+        .to.eventually.be.rejected.and.to.eql({
+          code: 400,
+          error: 'BadRequest',
+          message: 'Invalid request parameters.',
+        });
+    });
+
+    it('throws an error on only one invalid task', async () => {
+      await expect(user.post('/tasks/bulk-score', [
+        { id: '1', direction: 'up' },
+        { id: '1', direction: 'up' },
+        { id: '1', direction: 'up' },
+        { id: 'INVALID', direction: 'INVALID' },
+        { id: '1', direction: 'up' },
+      ])).to.eventually.be.rejected.and.to.eql({
+        code: 400,
+        error: 'BadRequest',
+        message: 'Invalid request parameters.',
+      });
+    });
+
+    it('throws an error on empty body', async () => {
+      const res = await user.post('/tasks/bulk-score', []);
+      expect(res).to.eventually.be.rejected.and.to.eql({
+        code: 400,
+        error: 'BadRequest',
+        message: 'Invalid request parameters.',
+      });
+    });
+
     it('can use an id to identify the task', async () => {
       const todo = await user.post('/tasks/user', {
         text: 'test todo',
@@ -174,7 +215,10 @@ describe('POST /tasks/bulk-score', () => {
     });
 
     it('doesn\'t let a todo be uncompleted twice', async () => {
-      await expect(user.post('/tasks/bulk-score', [{ id: todo.id, direction: 'down' }])).to.eventually.be.rejected.and.eql({
+      await expect(user.post('/tasks/bulk-score', [{
+        id: todo.id,
+        direction: 'down',
+      }])).to.eventually.be.rejected.and.eql({
         code: 401,
         error: 'NotAuthorized',
         message: t('sessionOutdated'),
@@ -203,8 +247,8 @@ describe('POST /tasks/bulk-score', () => {
     });
 
     context('user stats when direction is down', () => {
-      let updatedUser; let
-        initialUser;
+      let updatedUser;
+      let initialUser;
 
       beforeEach(async () => {
         await user.post('/tasks/bulk-score', [{ id: todo.id, direction: 'up' }]);
@@ -287,8 +331,8 @@ describe('POST /tasks/bulk-score', () => {
     });
 
     context('user stats when direction is down', () => {
-      let updatedUser; let
-        initialUser;
+      let updatedUser;
+      let initialUser;
 
       beforeEach(async () => {
         await user.post('/tasks/bulk-score', [{ id: daily.id, direction: 'up' }]);
@@ -312,8 +356,10 @@ describe('POST /tasks/bulk-score', () => {
   });
 
   context('habits', () => {
-    let habit; let minusHabit; let plusHabit; let
-      neitherHabit; // eslint-disable-line no-unused-vars
+    let habit;
+    let minusHabit;
+    let plusHabit;
+    let neitherHabit; // eslint-disable-line no-unused-vars
 
     beforeEach(async () => {
       habit = await user.post('/tasks/user', {
@@ -417,8 +463,9 @@ describe('POST /tasks/bulk-score', () => {
   });
 
   context('mixed', () => {
-    let habit; let daily; let
-      todo;
+    let habit;
+    let daily;
+    let todo;
     beforeEach(async () => {
       habit = await user.post('/tasks/user', {
         text: 'test habit',
@@ -451,8 +498,8 @@ describe('POST /tasks/bulk-score', () => {
   });
 
   context('reward', () => {
-    let reward; let
-      updatedUser;
+    let reward;
+    let updatedUser;
 
     beforeEach(async () => {
       reward = await user.post('/tasks/user', {

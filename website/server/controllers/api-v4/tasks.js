@@ -9,6 +9,9 @@ const api = {};
  * @apiName ScoreTasks
  * @apiGroup Task
  *
+ * @apiParam (Body) {List} data The list of task scoring items. Example [{id:'829d435b-edc4-498c-a30e-e52361a0f35a', direction:"up"}]
+ *
+ *
  * @apiSuccess {Object} data The user stats
  * @apiSuccess {Object} data._tmp If an item was dropped it'll be returned in te _tmp object
  * @apiSuccess {Number} data.delta The delta
@@ -40,6 +43,12 @@ api.scoreTasks = {
   middlewares: [authWithHeaders()],
   async handler (req, res) {
     const { user } = res.locals;
+    req.checkBody('*.id', 'invalid task id').notEmpty();
+    req.checkBody('*.direction', 'invalid direction').isIn(['up', 'down']);
+
+    const validationErrors = req.validationErrors();
+    if (validationErrors) throw validationErrors;
+
     const data = await scoreTasks(user, req.body, req, res);
 
     const userStats = user.stats.toJSON();
