@@ -21,7 +21,10 @@
       >
         {{ badgeCount }}
       </div>
-      <div class="filters d-flex justify-content-end">
+      <div
+        v-if="typeFilters.length > 1"
+        class="filters d-flex justify-content-end"
+      >
         <div
           v-for="filter in typeFilters"
           :key="filter"
@@ -78,9 +81,12 @@
         </div>
       </div>
       <draggable
+        v-if="taskList.length > 0"
         ref="tasksList"
         class="sortable-tasks"
         :options="{disabled: activeFilter.label === 'scheduled' || !isUser, scrollSensitivity: 64}"
+        :delay-on-touch-only="true"
+        :delay="100"
         @update="taskSorted"
         @start="isDragging(true)"
         @end="isDragging(false)"
@@ -101,6 +107,8 @@
         <draggable
           ref="rewardsList"
           class="reward-items"
+          :delay-on-touch-only="true"
+          :delay="100"
           @update="rewardSorted"
           @start="rewardDragStart"
           @end="rewardDragEnd"
@@ -109,7 +117,6 @@
             v-for="reward in inAppRewards"
             :key="reward.key"
             :item="reward"
-            :highlight-border="reward.isSuggested"
             :show-popover="showPopovers"
             :popover-position="'left'"
             @click="openBuyDialog(reward)"
@@ -119,14 +126,12 @@
               slot-scope="ctx"
             >
               <span
-                class="badge badge-pill badge-item badge-svg"
-                :class="{'item-selected-badge': ctx.item.pinned, 'hide': !ctx.highlightBorder}"
+                class="badge-top"
                 @click.prevent.stop="togglePinned(ctx.item)"
               >
-                <span
-                  class="svg-icon inline icon-12 color"
-                  v-html="icons.pin"
-                ></span>
+                <pin-badge
+                  :pinned="ctx.item.pinned"
+                />
               </span>
             </template>
           </shopItem>
@@ -141,6 +146,14 @@
 
   ::v-deep .draggable-cursor {
     cursor: grabbing;
+  }
+
+  .badge-pin {
+    display: none;
+  }
+
+  .item:hover .badge-pin {
+    display: block;
   }
 
   .tasks-column {
@@ -159,7 +172,7 @@
     @supports (display: grid) {
       display: grid;
       justify-content: center;
-      grid-column-gap: 16px;
+      grid-column-gap: 10px;
       grid-row-gap: 4px;
       grid-template-columns: repeat(auto-fill, 94px);
     }
@@ -168,7 +181,7 @@
       display: flex;
       flex-wrap: wrap;
       & > div {
-        margin: 0 16px 4px 0;
+        margin: 0 10px 4px 0;
       }
     }
   }
@@ -191,6 +204,7 @@
     border-color: transparent;
     transition: background 0.15s ease-in;
     resize: none;
+    overflow: hidden;
 
     &:hover {
       background-color: rgba($black, 0.1);
@@ -331,6 +345,7 @@ import buyMixin from '@/mixins/buy';
 import { mapState, mapActions, mapGetters } from '@/libs/store';
 import shopItem from '../shops/shopItem';
 import BuyQuestModal from '@/components/shops/quests/buyQuestModal.vue';
+import PinBadge from '@/components/ui/pinBadge';
 
 import notifications from '@/mixins/notifications';
 import { shouldDo } from '@/../../common/script/cron';
@@ -341,9 +356,9 @@ import {
   getTypeLabel,
   getFilterLabels,
   getActiveFilter,
+  sortAndFilterTasks,
 } from '@/libs/store/helpers/filterTasks';
 
-import svgPin from '@/assets/svg/pin.svg';
 import habitIcon from '@/assets/svg/habit.svg';
 import dailyIcon from '@/assets/svg/daily.svg';
 import todoIcon from '@/assets/svg/todo.svg';
@@ -355,11 +370,12 @@ export default {
     Task,
     ClearCompletedTodos,
     BuyQuestModal,
+    PinBadge,
     shopItem,
     draggable,
   },
   mixins: [buyMixin, notifications],
-  // Set default values for props
+  // @TODO Set default values for props
   // allows for better control of props values
   // allows for better control of where this component is called
   props: {
@@ -380,7 +396,6 @@ export default {
       daily: dailyIcon,
       todo: todoIcon,
       reward: rewardIcon,
-      pin: svgPin,
     });
 
     const typeLabel = '';
@@ -422,7 +437,7 @@ export default {
           type: this.type,
           filterType: this.activeFilter.label,
         })
-        : this.filterByLabel(this.taskListOverride, this.activeFilter.label);
+        : this.filterByLabel(this.taskListOverride, this.type, this.activeFilter.label);
 
       const taggedList = this.filterByTagList(filteredTaskList, this.selectedTags);
       const searchedList = this.filterBySearchText(taggedList, this.searchText);
@@ -489,7 +504,7 @@ export default {
     // Set Task Column Label
     this.typeLabel = getTypeLabel(this.type);
     // Get Category Filter Labels
-    this.typeFilters = getFilterLabels(this.type);
+    this.typeFilters = getFilterLabels(this.type, this.challenge);
     // Set default filter for task column
     this.activateFilter(this.type);
   },
@@ -506,7 +521,7 @@ export default {
       this.loadCompletedTodos();
     });
   },
-  destroyed () {
+  beforeDestroy () {
     this.$root.$off('buyModal::boughtItem');
     if (this.type !== 'todo') return;
     this.$root.$off(EVENTS.RESYNC_COMPLETED);
@@ -593,7 +608,7 @@ export default {
 
       const tasks = text.split('\n').reverse().filter(taskText => (!!taskText)).map(taskText => {
         const task = taskDefaults({ type: this.type, text: taskText }, this.user);
-        task.tags = this.selectedTags;
+        task.tags = this.selectedTags.slice();
         return task;
       });
 
@@ -622,15 +637,18 @@ export default {
       // as default filter for daily
       // and set the filter as 'due' only when the component first
       // loads and not on subsequent reloads.
-      if (type === 'daily' && filter === '' && this.user.preferences.dailyDueDefaultView) {
+      if (
+        type === 'daily' && filter === '' && !this.challenge
+        && this.user.preferences.dailyDueDefaultView
+      ) {
         filter = 'due'; // eslint-disable-line no-param-reassign
       }
 
-      this.activeFilter = getActiveFilter(type, filter);
+      this.activeFilter = getActiveFilter(type, filter, this.challenge);
     },
     setColumnBackgroundVisibility () {
       this.$nextTick(() => {
-        if (!this.$refs.columnBackground) return;
+        if (!this.$refs.columnBackground || !this.$refs.tasksList) return;
 
         const tasksWrapperEl = this.$refs.tasksWrapper;
 
@@ -654,15 +672,10 @@ export default {
         }
       });
     },
-    filterByLabel (taskList, filter) {
+    filterByLabel (taskList, type, filter) {
       if (!taskList) return [];
-      return taskList.filter(task => {
-        if (filter === 'all') return true;
-        if (filter === 'complete2') return task.completed;
-        if (filter === 'due') return !task.completed && task.isDue;
-        if (filter === 'notDue') return task.completed || !task.isDue;
-        return !task.completed;
-      });
+      const selectedFilter = getActiveFilter(type, filter, this.challenge);
+      return sortAndFilterTasks(taskList, selectedFilter);
     },
     filterByTagList (taskList, tagList = []) {
       let filteredTaskList = taskList;

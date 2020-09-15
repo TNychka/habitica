@@ -49,11 +49,13 @@
                 target="_blank"
               >{{ $t('oldNews') }}</a>
             </li>
+            <!-- Commenting out merch page see https://github.com/HabitRPG/habitica/issues/12039
             <li>
               <router-link to="/static/merch">
                 {{ $t('merch') }}
               </router-link>
             </li>
+            -->
             <li>
               <router-link to="/static/press-kit">
                 {{ $t('presskit') }}
@@ -71,7 +73,7 @@
           <ul>
             <li>
               <a
-                target="_blanck"
+                target="_blank"
                 href="/static/community-guidelines"
               >{{ $t('communityGuidelines') }}</a>
             </li>
@@ -89,7 +91,7 @@
             </li>
             <li>
               <a
-                href="https://trello.com/c/odmhIqyW/440-read-first-table-of-contents"
+                href="https://docs.google.com/forms/d/e/1FAIpQLScPhrwq_7P1C6PTrI3lbvTsvqGyTNnGzp1ugi1Ml0PFee_p5g/viewform?usp=sf_link"
                 target="_blank"
               >{{ $t('requestFeature') }}</a>
             </li>
@@ -177,7 +179,7 @@
             <div class="col-12 col-md-4">
               <button
                 v-if="user"
-                class="btn btn-contribute btn-flat"
+                class="btn btn-contribute btn-front btn-flat"
                 @click="donate()"
               >
                 <div
@@ -190,7 +192,7 @@
               </button>
               <div
                 v-else
-                class="btn btn-contribute btn-flat"
+                class="btn btn-contribute btn-front btn-flat"
               >
                 <a
                   href="http://habitica.fandom.com/wiki/Contributing_to_Habitica"
@@ -214,7 +216,7 @@
       </div>
       <div class="row">
         <div class="col-12 col-md-5">
-          © 2019 Habitica. All rights reserved.
+          © 2020 Habitica. All rights reserved.
           <div
             v-if="!IS_PRODUCTION && isUserLoaded"
             class="debug float-left"
@@ -306,13 +308,13 @@
         <div class="col-12 col-md-5 text-right">
           <span class="ml-4">
             <a
-              target="_blanck"
+              target="_blank"
               href="/static/privacy"
             >{{ $t('privacy') }}</a>
           </span>
           <span class="ml-4">
             <a
-              target="_blanck"
+              target="_blank"
               href="/static/terms"
             >{{ $t('terms') }}</a>
           </span>
@@ -415,6 +417,7 @@
     background: #c3c0c7;
     box-shadow: none;
     border-radius: 4px;
+    font-family: Roboto Condensed,sans-serif;
 
     &:hover {
       background: #a5a1ac;
@@ -527,7 +530,7 @@ export default {
       });
     },
     async addMissedDay (numberOfDays) {
-      if (!window.confirm(`Are you sure you want to reset the day by ${numberOfDays} day(s)?`)) return;
+      if (!window.confirm(`Are you sure you want to reset the day by ${numberOfDays} day(s)?`)) return; // eslint-disable-line no-alert
 
       const date = moment(this.user.lastCron).subtract(numberOfDays, 'days').toDate();
 

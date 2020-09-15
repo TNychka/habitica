@@ -16,7 +16,7 @@
         <div class="row">
           <div
             v-for="heroClass in classes"
-            :key="heroClass"
+            :key="`${heroClass}-avatar`"
             class="col-md-3"
           >
             <div @click="selectedClass = heroClass">
@@ -60,7 +60,7 @@
         </div>
         <div
           v-for="heroClass in classes"
-          :key="heroClass"
+          :key="`${heroClass}-explanation`"
         >
           <div
             v-if="selectedClass === heroClass"
@@ -216,7 +216,7 @@ export default {
       this.$root.$emit('bv::hide::modal', 'choose-class');
     },
     clickSelectClass (heroClass) {
-      if (this.user.flags.classSelected && !window.confirm(this.$t('changeClassConfirmCost'))) return;
+      if (this.user.flags.classSelected && !window.confirm(this.$t('changeClassConfirmCost'))) return; // eslint-disable-line no-alert
       this.$store.dispatch('user:changeClass', { query: { class: heroClass } });
     },
     clickDisableClasses () {

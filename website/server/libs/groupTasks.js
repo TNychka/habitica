@@ -164,15 +164,12 @@ async function _updateAssignedUsersTasks (masterTask, groupMemberTask) {
 async function _evaluateAllAssignedCompletion (masterTask, groupMemberTask) {
   let completions;
   if (masterTask.group.approval && masterTask.group.approval.required) {
-    completions = await Tasks.Task.count({
+    completions = await Tasks.Task.countDocuments({
       'group.taskId': masterTask._id,
       'group.approval.approved': true,
     }).exec();
-    // Since an approval is not yet saved into the group member task, count it
-    // But do not recount a group member completing an already approved task
-    if (!groupMemberTask.completed) completions += 1;
   } else {
-    completions = await Tasks.Task.count({
+    completions = await Tasks.Task.countDocuments({
       'group.taskId': masterTask._id,
       completed: true,
     }).exec();
@@ -216,13 +213,8 @@ async function groupTaskCompleted (groupMemberTask, user, now) {
   return false;
 }
 
-async function handleSharedCompletion (groupMemberTask) {
-  const masterTask = await Tasks.Task.findOne({
-    _id: groupMemberTask.group.taskId,
-    type: { $ne: 'habit' },
-  }).exec();
-
-  if (!masterTask || !masterTask.group) return;
+async function handleSharedCompletion (masterTask, groupMemberTask) {
+  if (masterTask.type !== 'todo') return;
 
   if (masterTask.group.sharedCompletion === SHARED_COMPLETION.single) {
     await _updateAssignedUsersTasks(masterTask, groupMemberTask);

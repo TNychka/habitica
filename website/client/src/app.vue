@@ -20,10 +20,6 @@
           </svg>
           <!-- eslint-enable max-len -->
         </div>
-        <div class="col-12 text-center">
-          <h2>{{ $t('tipTitle', {tipNumber: currentTipNumber}) }}</h2>
-          <p>{{ currentTip }}</p>
-        </div>
       </div>
     </div>
     <div
@@ -33,7 +29,7 @@
         'resting': showRestingBanner
       }"
     >
-      <banned-account-modal />
+      <!-- <banned-account-modal /> -->
       <amazon-payments-modal v-if="!isStaticPage" />
       <payments-success-modal />
       <sub-cancel-modal-confirm v-if="isUserLoaded" />
@@ -123,7 +119,6 @@
     #melior {
       margin: 0 auto;
       width: 70.9px;
-      margin-bottom: 1em;
     }
 
     .row {
@@ -222,11 +217,6 @@
     opacity: 0.48;
   }
 
-  /* @TODO: The modal-open class is not being removed. Let's try this for now */
-  .modal {
-    overflow-y: scroll !important;
-  }
-
   .modal-backdrop {
     opacity: .9 !important;
     background-color: $purple-100 !important;
@@ -266,7 +256,6 @@ import {
 } from '@/libs/userlocalManager';
 
 import svgClose from '@/assets/svg/close.svg';
-import bannedAccountModal from '@/components/bannedAccountModal';
 
 const COMMUNITY_MANAGER_EMAIL = process.env.EMAILS_COMMUNITY_MANAGER_EMAIL; // eslint-disable-line
 
@@ -281,7 +270,6 @@ export default {
     BuyModal,
     SelectMembersModal,
     amazonPaymentsModal,
-    bannedAccountModal,
     paymentsSuccessModal,
     subCancelModalConfirm,
     subCanceledModal,
@@ -299,27 +287,17 @@ export default {
       audioSuffix: null,
 
       loading: true,
-      currentTipNumber: 0,
       bannerHidden: false,
     };
   },
   computed: {
-    ...mapState(['isUserLoggedIn', 'browserTimezoneOffset', 'isUserLoaded']),
+    ...mapState(['isUserLoggedIn', 'browserTimezoneUtcOffset', 'isUserLoaded', 'notificationsRemoved']),
     ...mapState({ user: 'user.data' }),
     isStaticPage () {
       return this.$route.meta.requiresLogin === false;
     },
     castingSpell () {
       return this.$store.state.spellOptions.castingSpell;
-    },
-    currentTip () {
-      const numberOfTips = 35 + 1;
-      const min = 1;
-      const randomNumber = Math.random() * (numberOfTips - min) + min;
-      const tipNumber = Math.floor(randomNumber);
-      this.currentTipNumber = tipNumber; // eslint-disable-line vue/no-side-effects-in-computed-properties, max-len
-
-      return this.$t(`tip${tipNumber}`);
     },
     showRestingBanner () {
       return !this.bannerHidden && this.user && this.user.preferences.sleep;
@@ -377,15 +355,62 @@ export default {
       showSpinner: false,
     });
 
-    // Set up Error interceptors
-    axios.interceptors.response.use(response => {
-      if (this.user && response.data && response.data.notifications) {
-        this.$set(this.user, 'notifications', response.data.notifications);
+    axios.interceptors.response.use(response => { // Set up Response interceptors
+      // Verify that the user was not updated from another browser/app/client
+      // If it was, sync
+      const { url } = response.config;
+      const { method } = response.config;
+
+      const isApiCall = url.indexOf('api/v4') !== -1;
+      const userV = response.data && response.data.userV;
+
+      if (this.isUserLoaded && isApiCall && userV) {
+        const oldUserV = this.user._v;
+        this.user._v = userV;
+
+        // Do not sync again if already syncing
+        const isUserSync = url.indexOf('/api/v4/user') === 0 && method === 'get';
+        const isTasksSync = url.indexOf('/api/v4/tasks/user') === 0 && method === 'get';
+        // exclude chat seen requests because with real time chat they would be too many
+        const isChatSeen = url.indexOf('/chat/seen') !== -1 && method === 'post';
+        // exclude POST /api/v4/cron because the user is synced automatically after cron runs
+        const isCron = url.indexOf('/api/v4/cron') === 0 && method === 'post';
+        // exclude skills casting as they already return the synced user
+        const isCast = url.indexOf('/api/v4/user/class/cast') !== -1 && method === 'post';
+
+        // Something has changed on the user object that was not tracked here, sync the user
+        if (
+          userV - oldUserV > 1 && !isCron && !isChatSeen && !isUserSync && !isTasksSync && !isCast
+        ) {
+          Promise.all([
+            this.$store.dispatch('user:fetch', { forceLoad: true }),
+            this.$store.dispatch('tasks:fetchUserTasks', { forceLoad: true }),
+          ]);
+        }
       }
+
+      // Store the app version from the server
+      const serverAppVersion = response.data && response.data.appVersion;
+
+      if (serverAppVersion && this.$store.state.serverAppVersion !== response.data.appVersion) {
+        this.$store.state.serverAppVersion = serverAppVersion;
+      }
+
+      // Store the notifications, filtering those that have already been read
+      // See store/index.js on why this is necessary
+      if (this.user && response.data && response.data.notifications) {
+        const filteredNotifications = response.data.notifications.filter(serverNotification => {
+          if (this.notificationsRemoved.includes(serverNotification.id)) return false;
+          return true;
+        });
+        this.$set(this.user, 'notifications', filteredNotifications);
+      }
+
       return response;
-    }, error => {
+    }, error => { // Set up Error interceptors
       if (error.response.status >= 400) {
-        this.checkForBannedUser(error);
+        const isBanned = this.checkForBannedUser(error);
+        if (isBanned === true) return null; // eslint-disable-line consistent-return
 
         // Don't show errors from getting user details. These users have delete their account,
         // but their chat message still exists.
@@ -403,7 +428,8 @@ export default {
         // TODO use a specific error like NotificationNotFound instead of checking for the string
         const invalidUserMessage = [this.$t('invalidCredentials'), 'Missing authentication headers.'];
         if (invalidUserMessage.indexOf(errorMessage) !== -1) {
-          this.$store.dispatch('auth:logout');
+          this.$store.dispatch('auth:logout', { redirectToLogin: true });
+          return null;
         }
 
         // Most server errors should return is click to dismiss errors, with some exceptions
@@ -439,51 +465,6 @@ export default {
       return Promise.reject(error);
     });
 
-    axios.interceptors.response.use(response => {
-      // Verify that the user was not updated from another browser/app/client
-      // If it was, sync
-      const { url } = response.config;
-      const { method } = response.config;
-
-      const isApiCall = url.indexOf('api/v4') !== -1;
-      const userV = response.data && response.data.userV;
-      const isCron = url.indexOf('/api/v4/cron') === 0 && method === 'post';
-
-      if (this.isUserLoaded && isApiCall && userV) {
-        const oldUserV = this.user._v;
-        this.user._v = userV;
-
-        // Do not sync again if already syncing
-        const isUserSync = url.indexOf('/api/v4/user') === 0 && method === 'get';
-        const isTasksSync = url.indexOf('/api/v4/tasks/user') === 0 && method === 'get';
-        // exclude chat seen requests because with real time chat they would be too many
-        const isChatSeen = url.indexOf('/chat/seen') !== -1 && method === 'post';
-        // exclude POST /api/v4/cron because the user is synced automatically after cron runs
-
-        // Something has changed on the user object that was not tracked here, sync the user
-        if (userV - oldUserV > 1 && !isCron && !isChatSeen && !isUserSync && !isTasksSync) {
-          Promise.all([
-            this.$store.dispatch('user:fetch', { forceLoad: true }),
-            this.$store.dispatch('tasks:fetchUserTasks', { forceLoad: true }),
-          ]);
-        }
-      }
-
-      // Verify the client is updated
-      // const serverAppVersion = response.data.appVersion;
-      // let serverAppVersionState = this.$store.state.serverAppVersion;
-      // if (isApiCall && !serverAppVersionState) {
-      //   this.$store.state.serverAppVersion = serverAppVersion;
-      // } else if (isApiCall && serverAppVersionState !== serverAppVersion) {
-      //   if (document.activeElement.tagName !== 'INPUT'
-      // || confirm(this.$t('habiticaHasUpdated'))) {
-      //     location.reload(true);
-      //   }
-      // }
-
-      return response;
-    });
-
     // Setup listener for title
     this.$store.watch(state => state.title, title => {
       document.title = title;
@@ -506,9 +487,10 @@ export default {
         this.hideLoadingScreen();
 
         // Adjust the timezone offset
-        if (this.user.preferences.timezoneOffset !== this.browserTimezoneOffset) {
+        const browserTimezoneOffset = -this.browserTimezoneUtcOffset;
+        if (this.user.preferences.timezoneOffset !== browserTimezoneOffset) {
           this.$store.dispatch('user:set', {
-            'preferences.timezoneOffset': this.browserTimezoneOffset,
+            'preferences.timezoneOffset': browserTimezoneOffset,
           });
         }
 
@@ -530,13 +512,9 @@ export default {
     } else {
       this.hideLoadingScreen();
     }
-
-    this.initializeModalStack();
   },
   beforeDestroy () {
     this.$root.$off('playSound');
-    this.$root.$off('bv::modal::hidden');
-    this.$root.$off('bv::show::modal');
     this.$root.$off('buyModal::showItem');
     this.$root.$off('selectMembersModal::showItem');
   },
@@ -553,7 +531,7 @@ export default {
 
       // Case where user is not logged in
       if (!parseSettings) {
-        return;
+        return false;
       }
 
       const bannedMessage = this.$t('accountSuspended', {
@@ -561,115 +539,10 @@ export default {
         userId: parseSettings.auth.apiId,
       });
 
-      if (errorMessage !== bannedMessage) return;
+      if (errorMessage !== bannedMessage) return false;
 
-      this.$root.$emit('bv::show::modal', 'banned-account');
-    },
-    initializeModalStack () {
-      // Manage modals
-      this.$root.$on('bv::show::modal', (modalId, data = {}) => {
-        if (data.fromRoot) return;
-        const { modalStack } = this.$store.state;
-
-        this.trackGemPurchase(modalId, data);
-
-        // Add new modal to the stack
-        const prev = modalStack[modalStack.length - 1];
-        const prevId = prev ? prev.modalId : undefined;
-        modalStack.push({ modalId, prev: prevId });
-      });
-
-      this.$root.$on('bv::modal::hidden', bvEvent => {
-        let modalId = bvEvent.target && bvEvent.target.id;
-
-        // sometimes the target isn't passed to the hidden event, fallback is the vueTarget
-        if (!modalId) {
-          modalId = bvEvent.vueTarget && bvEvent.vueTarget.id;
-        }
-
-        if (!modalId) {
-          return;
-        }
-
-        const { modalStack } = this.$store.state;
-
-        const modalOnTop = modalStack[modalStack.length - 1];
-
-        // Check for invalid modal. Event systems can send multiples
-        if (!this.validStack(modalStack)) return;
-
-        // If we are moving forward
-        if (modalOnTop && modalOnTop.prev === modalId) return;
-
-        // Remove modal from stack
-        this.$store.state.modalStack.pop();
-
-        // Get previous modal
-        const modalBefore = modalOnTop ? modalOnTop.prev : undefined;
-
-        if (modalBefore) this.$root.$emit('bv::show::modal', modalBefore, { fromRoot: true });
-      });
-
-      // Dismiss modal aggressively. Pass a modal ID to remove a modal instance from the stack
-      // (both the stack entry itself and its "prev" reference) so we don't reopen it
-      this.$root.$on('habitica::dismiss-modal', oldModal => {
-        if (!oldModal) return;
-        this.$root.$emit('bv::hide::modal', oldModal);
-        let removeIndex = this.$store.state.modalStack
-          .map(modal => modal.modalId)
-          .indexOf(oldModal);
-        if (removeIndex >= 0) {
-          this.$store.state.modalStack.splice(removeIndex, 1);
-        }
-        removeIndex = this.$store.state.modalStack
-          .map(modal => modal.prev)
-          .indexOf(oldModal);
-        if (removeIndex >= 0) {
-          delete this.$store.state.modalStack[removeIndex].prev;
-        }
-      });
-    },
-    validStack (modalStack) {
-      const modalsThatCanShowTwice = ['profile'];
-      const modalCount = {};
-      const prevAndCurrent = 2;
-
-      for (const current of modalStack) {
-        if (!modalCount[current.modalId]) modalCount[current.modalId] = 0;
-        modalCount[current.modalId] += 1;
-        if (
-          modalCount[current.modalId] > prevAndCurrent
-          && modalsThatCanShowTwice.indexOf(current.modalId) === -1
-        ) {
-          this.$store.state.modalStack = [];
-          return false;
-        }
-
-        if (!current.prev) continue; // eslint-disable-line
-        if (!modalCount[current.prev]) modalCount[current.prev] = 0;
-        modalCount[current.prev] += 1;
-        if (
-          modalCount[current.prev] > prevAndCurrent
-          && modalsThatCanShowTwice.indexOf(current.prev) === -1
-        ) {
-          this.$store.state.modalStack = [];
-          return false;
-        }
-      }
-
+      this.$store.dispatch('auth:logout', { redirectToLogin: true });
       return true;
-    },
-    trackGemPurchase (modalId, data) {
-      // Track opening of gems modal unless it's been already tracked
-      // For example the gems button in the menu already tracks the event by itself
-      if (modalId === 'buy-gems' && data.alreadyTracked !== true) {
-        Analytics.track({
-          hitType: 'event',
-          eventCategory: 'button',
-          eventAction: 'click',
-          eventLabel: 'Gems > Wallet',
-        });
-      }
     },
     itemSelected (item) {
       this.selectedItemToBuy = item;
@@ -758,5 +631,6 @@ export default {
 <style src="@/assets/css/sprites/spritesmith-main-25.css"></style>
 <style src="@/assets/css/sprites/spritesmith-main-26.css"></style>
 <style src="@/assets/css/sprites/spritesmith-main-27.css"></style>
+<style src="@/assets/css/sprites/spritesmith-main-28.css"></style>
 <style src="@/assets/css/sprites.css"></style>
 <style src="smartbanner.js/dist/smartbanner.min.css"></style>

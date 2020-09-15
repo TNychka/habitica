@@ -59,6 +59,7 @@ import pickDeep from './libs/pickDeep';
 import * as count from './count';
 import autoAllocate from './fns/autoAllocate';
 import crit from './fns/crit';
+import getUtcOffset from './fns/getUtcOffset';
 import handleTwoHanded from './fns/handleTwoHanded';
 import predictableRandom from './fns/predictableRandom';
 import randomDrop from './fns/randomDrop';
@@ -97,7 +98,6 @@ import allocateNow from './ops/stats/allocateNow';
 import unlock from './ops/unlock';
 import updateTask from './ops/updateTask';
 import { unEquipByType } from './ops/unequip';
-
 
 const api = {};
 api.content = content;
@@ -168,6 +168,7 @@ api.fns = {
   resetGear,
   ultimateGear,
   updateStats,
+  getUtcOffset,
 };
 
 api.ops = {

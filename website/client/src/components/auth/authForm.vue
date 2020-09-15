@@ -39,7 +39,7 @@
           @click="socialAuth('apple')"
         >
           <div
-            class="svg-icon social-icon"
+            class="svg-icon social-icon apple-icon"
             v-html="icons.appleIcon"
           ></div>
           <span>{{ registering
@@ -217,7 +217,11 @@
       height: 18px;
       display: inline-block;
       vertical-align: top;
-      margin-top: .2em;
+      margin-top: .1em;
+    }
+
+    .apple-icon {
+      margin-top: -1px;
     }
 
     small.form-text {
@@ -356,12 +360,12 @@ export default {
     },
     async register () {
       if (!this.email) {
-        window.alert(this.$t('missingEmail'));
+        window.alert(this.$t('missingEmail')); // eslint-disable-line no-alert
         return;
       }
 
       if (this.password !== this.passwordConfirm) {
-        window.alert(this.$t('passwordConfirmationMatch'));
+        window.alert(this.$t('passwordConfirmationMatch')); // eslint-disable-line no-alert
         return;
       }
 
@@ -377,7 +381,7 @@ export default {
       } catch (e) {
         if (e.response.data.data && e.response.data.data.errors) {
           const message = e.response.data.data.errors.map(error => `${error.message}\n`);
-          window.alert(message);
+          window.alert(message); // eslint-disable-line no-alert
         }
       }
     },

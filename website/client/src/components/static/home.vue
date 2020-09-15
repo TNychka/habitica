@@ -131,7 +131,7 @@
                 @click="socialAuth('apple')"
               >
                 <div
-                  class="svg-icon social-icon"
+                  class="svg-icon social-icon apple-icon"
                   v-html="icons.appleIcon"
                 ></div>
                 <span>{{ $t('signUpWithSocial', {social: 'Apple'}) }}</span>
@@ -304,7 +304,7 @@
         <div class="row">
           <div class="col-12 text-center">
             <button
-              class="btn btn-primary join-button"
+              class="btn btn-primary btn-front join-button"
               @click="playButtonClick()"
             >
               {{ $t('joinToday') }}
@@ -460,7 +460,7 @@
     }
 
     h3 {
-      font-size: 24px;
+      font-size: 32px;
     }
 
     .social-button {
@@ -491,7 +491,11 @@
       height: 18px;
       display: inline-block;
       vertical-align: top;
-      margin-top: .2em;
+      margin-top: .1em;
+    }
+
+    .apple-icon {
+      margin-top: -1px;
     }
 
     .strike {
@@ -676,10 +680,13 @@
       padding-bottom: 5em;
     }
 
-    .join-button:hover {
+    .join-button {
       cursor: pointer;
-      background-color: #b288ff;
-      box-shadow: 0 4px 4px 0 rgba(26, 24, 29, 0.16), 0 1px 8px 0 rgba(26, 24, 29, 0.12);
+
+      &:hover {
+        background-color: #5d3b9c;
+        box-shadow: 0 4px 4px 0 rgba(26, 24, 29, 0.16), 0 1px 8px 0 rgba(26, 24, 29, 0.12);
+      }
     }
 
     .featured .row {
@@ -909,6 +916,7 @@ export default {
       if (username.length < 1) {
         return;
       }
+
       this.$store.dispatch('auth:verifyUsername', {
         username: this.username,
       }).then(res => {
@@ -938,15 +946,7 @@ export default {
         groupInvite,
       });
 
-      let redirectTo;
-
-      if (this.$route.query.redirectTo) {
-        redirectTo = this.$route.query.redirectTo;
-      } else {
-        redirectTo = '/';
-      }
-
-      window.location.href = redirectTo;
+      window.location.href = this.$route.query.redirectTo || '/';
     },
     playButtonClick () {
       Analytics.track({
@@ -964,7 +964,7 @@ export default {
       } else {
         try {
           await hello(network).logout();
-          } catch (e) {} // eslint-disable-line
+        } catch (e) {} // eslint-disable-line
 
         const redirectUrl = `${window.location.protocol}//${window.location.host}`;
         const auth = await hello(network).login({

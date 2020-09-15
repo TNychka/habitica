@@ -133,6 +133,11 @@ export default new Schema({
     pearlyPro: Boolean,
     tickledPink: Boolean,
     rosyOutlook: Boolean,
+    bugBonanza: Boolean,
+    bareNecessities: Boolean,
+    freshwaterFriends: Boolean,
+    goodAsGold: Boolean,
+    allThatGlitters: Boolean,
     // Onboarding Guide
     createdTask: Boolean,
     completedTask: Boolean,
@@ -148,8 +153,7 @@ export default new Schema({
   },
 
   contributor: {
-    // 1-9, see https://trello.com/c/wkFzONhE/277-contributor-gear
-    // https://github.com/HabitRPG/habitica/issues/3801
+    // 1-9, see https://habitica.fandom.com/wiki/Contributor_Rewards
     level: {
       $type: Number,
       min: 0,
@@ -161,6 +165,7 @@ export default new Schema({
     text: String,
     // a markdown textarea to list their contributions + links
     contributions: String,
+    // user can own Critical Hammer of Bug-Crushing if this has a truthy value
     critical: String,
   },
 
@@ -653,6 +658,11 @@ export default new Schema({
     path: { $type: String },
     type: { $type: String },
   }],
+
+  // only visible to staff and moderators
+  secret: {
+    text: String,
+  },
 }, {
   skipVersioning: { notifications: true },
   strict: true,

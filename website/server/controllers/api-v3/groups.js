@@ -349,9 +349,10 @@ api.getGroups = {
 
     if (req.query.search) {
       filters.$or = [];
-      const searchWords = _.escapeRegExp(req.query.search).split(' ').join('|');
+      const searchWords = _.escapeRegExp(req.query.search.trim()).split(/\s+/).join('|');
       const searchQuery = { $regex: new RegExp(`${searchWords}`, 'i') };
       filters.$or.push({ name: searchQuery });
+      filters.$or.push({ summary: searchQuery });
       filters.$or.push({ description: searchQuery });
     }
 
@@ -470,6 +471,14 @@ api.updateGroup = {
 
     if (!group) throw new NotFound(res.t('groupNotFound'));
 
+    if (user.contributor.admin) {
+      if (req.body.bannedWordsAllowed === true) {
+        group.bannedWordsAllowed = true;
+      } else {
+        group.bannedWordsAllowed = false;
+      }
+    }
+
     if (group.leader !== user._id && group.type === 'party') throw new NotAuthorized(res.t('messageGroupOnlyLeaderCanUpdate'));
     else if (group.leader !== user._id && !user.contributor.admin) throw new NotAuthorized(res.t('messageGroupOnlyLeaderCanUpdate'));
 
@@ -543,20 +552,23 @@ api.joinGroup = {
       // Check if was invited to party
       const inviterParty = _.find(user.invitations.parties, { id: group._id });
       if (inviterParty) {
-        inviter = inviterParty.inviter;
+        // Check if the user is already a member of the party or not. Only make the user leave the
+        // party if the user is not a member of the party. See #12291 for more details.
+        if (user.party._id !== group._id) {
+          inviter = inviterParty.inviter;
 
-        // If user was in a different party (when partying solo you can be invited to a new party)
-        // make them leave that party before doing anything
-        if (user.party._id) {
-          const userPreviousParty = await Group.getGroup({ user, groupId: user.party._id });
+          // If user was in a different party (when partying solo you can be invited to a new party)
+          // make them leave that party before doing anything
+          if (user.party._id) {
+            const userPreviousParty = await Group.getGroup({ user, groupId: user.party._id });
 
-          if (userPreviousParty.memberCount === 1 && user.party.quest.key) {
-            throw new NotAuthorized(res.t('messageCannotLeaveWhileQuesting'));
+            if (userPreviousParty.memberCount === 1 && user.party.quest.key) {
+              throw new NotAuthorized(res.t('messageCannotLeaveWhileQuesting'));
+            }
+
+            if (userPreviousParty) await userPreviousParty.leave(user);
           }
-
-          if (userPreviousParty) await userPreviousParty.leave(user);
         }
-
         // Clear all invitations of new user
         user.invitations.parties = [];
         user.invitations.party = {};
@@ -602,13 +614,22 @@ api.joinGroup = {
       group.leader = user._id; // If new user is only member -> set as leader
     }
 
-    group.memberCount += 1;
+    if (group.type === 'party') {
+      // For parties we count the number of members from the database to get the correct value.
+      // See #12275 on why this is necessary and only done for parties.
+      const currentMembers = await group.getMemberCount();
+      group.memberCount = currentMembers + 1;
+    } else {
+      group.memberCount += 1;
+    }
 
     let promises = [group.save(), user.save()];
 
-    if (inviter) {
-      inviter = await User.findById(inviter).exec();
+    // Load the inviter
+    if (inviter) inviter = await User.findById(inviter).exec();
 
+    // Check the inviter again, could be a deleted account
+    if (inviter) {
       const data = {
         headerText: common.i18n.t('invitationAcceptedHeader', inviter.preferences.language),
         bodyText: common.i18n.t('invitationAcceptedBody', {
@@ -855,16 +876,6 @@ api.leaveGroup = {
     _removeMessagesFromMember(user, group._id);
     await user.save();
 
-    if (group.type !== 'party') {
-      const guildIndex = user.guilds.indexOf(group._id);
-      if (guildIndex >= 0) user.guilds.splice(guildIndex, 1);
-    }
-
-    const isMemberOfGroupPlan = await user.isMemberOfGroupPlan();
-    if (!isMemberOfGroupPlan) {
-      await payments.cancelGroupSubscriptionForUser(user, group);
-    }
-
     if (group.hasNotCancelled()) await group.updateGroupPlan(true);
     res.respond(200, {});
   },
@@ -955,7 +966,14 @@ api.removeGroupMember = {
     }
 
     if (isInGroup) {
-      group.memberCount -= 1;
+      // For parties we count the number of members from the database to get the correct value.
+      // See #12275 on why this is necessary and only done for parties.
+      if (group.type === 'party') {
+        const currentMembers = await group.getMemberCount();
+        group.memberCount = currentMembers - 1;
+      } else {
+        group.memberCount -= 1;
+      }
 
       if (group.quest && group.quest.leader === member._id) {
         group.quest.key = undefined;
@@ -1188,7 +1206,7 @@ api.inviteToGroup = {
  * @apiParamExample {String} party:
  *     /api/v3/groups/party/add-manager
  *
- * @apiBody (Body) {UUID} managerId The user _id of the member to promote to manager
+ * @apiParam (Body) {UUID} managerId The user _id of the member to promote to manager
  *
  * @apiSuccess {Object} data An empty object
  *
@@ -1238,7 +1256,7 @@ api.addGroupManager = {
  * @apiParamExample {String} party:
  *     /api/v3/groups/party/add-manager
  *
- * @apiBody (Body) {UUID} managerId The user _id of the member to remove
+ * @apiParam (Body) {UUID} managerId The user _id of the member to remove
  *
  * @apiSuccess {Object} group The group
  *
@@ -1314,7 +1332,7 @@ api.getGroupPlans = {
       .select('leaderOnly leader purchased name managers')
       .exec();
 
-    const groupPlans = groups.filter(group => group.isSubscribed());
+    const groupPlans = groups.filter(group => group.hasActiveGroupPlan());
 
     res.respond(200, groupPlans);
   },

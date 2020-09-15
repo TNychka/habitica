@@ -1,14 +1,14 @@
 .svg-icon {
   display: block;
-  transition: none !important;
   fill: currentColor;
 
   svg {
     display: block;
-  }
+    transition: none;
 
-  * {
-    transition: none !important;
+    path {
+      transition: none;
+    }
   }
 
   &.color {
@@ -53,8 +53,8 @@
 
 .close-icon {
   position: absolute;
-  top: 24px;
-  right: 24px;
+  top: 1rem;
+  right: 1rem;
   cursor: pointer;
 
   & svg path {

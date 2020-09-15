@@ -46,7 +46,7 @@
   "hatchingPotion": "hatching potion",
   "noHatchingPotions": "You don't have any hatching potions.",
   "inventoryText": "Click an egg to see usable potions highlighted in green and then click one of the highlighted potions to hatch your pet. If no potions are highlighted, click that egg again to deselect it, and instead click a potion first to have the usable eggs highlighted. You can also sell unwanted drops to Alexander the Merchant.",
-  "haveHatchablePet": "You have a <%= potion %> hatching potion and <%= egg %> egg to hatch this pet! <b>Click</b> the paw print to hatch.",
+  "haveHatchablePet": "You have a <%= potion %> hatching potion and <%= egg %> egg to hatch this pet! <b>Click</b> to hatch!",
   "quickInventory": "Quick Inventory",
   "food": "Pet Food and Saddles",
   "noFoodAvailable": "You don't have any Pet Food.",
@@ -141,5 +141,8 @@
   "clickOnPotionToHatch": "Click on a hatching potion to use it on your <%= eggName %> and hatch a new pet!",
   "notEnoughPets": "You have not collected enough pets",
   "notEnoughMounts": "You have not collected enough mounts",
-  "notEnoughPetsMounts": "You have not collected enough pets and mounts"
+  "notEnoughPetsMounts": "You have not collected enough pets and mounts",
+  "notEnoughFood": "You don't have enough food",
+  "tooMuchFood": "You're trying to feed too much food to your pet, action cancelled",
+  "invalidAmount": "Invalid amount of food, must be a positive integer"
 }

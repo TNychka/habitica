@@ -85,7 +85,10 @@ export async function socialAuth (store, params) {
 export async function appleAuth (store, params) {
   const url = '/api/v4/user/auth/apple';
   const result = await axios.get(url, {
-    params: { code: params.code },
+    params: {
+      code: params.code,
+      name: params.name,
+    },
   });
 
   const user = result.data.data;
@@ -100,7 +103,8 @@ export async function appleAuth (store, params) {
   localStorage.setItem(LOCALSTORAGE_AUTH_KEY, userLocalData);
 }
 
-export function logout () {
+export function logout (store, options = {}) {
   localStorage.clear();
-  window.location.href = '/logout-server';
+  const query = options.redirectToLogin === true ? '?redirectToLogin=true' : '';
+  window.location.href = `/logout-server${query}`;
 }

@@ -371,10 +371,7 @@ api.getUserChallenges = {
       { _id: { $in: user.challenges } }, // Challenges where the user is participating
     ];
 
-    const { owned } = req.query;
-    if (!owned) {
-      orOptions.push({ leader: user._id });
-    }
+    orOptions.push({ leader: user._id });
 
     if (!req.query.member) {
       orOptions.push({
@@ -386,6 +383,7 @@ api.getUserChallenges = {
       $and: [{ $or: orOptions }],
     };
 
+    const { owned } = req.query;
     if (owned) {
       if (owned === 'not_owned') {
         query.$and.push({ leader: { $ne: user._id } });
@@ -659,7 +657,7 @@ api.exportChallengeCsv = {
 };
 
 /**
- * @api {put} /api/v3/challenges/:challengeId Update the name, description, or leader of a challenge
+ * @api {put} /api/v3/challenges/:challengeId Update a challenge's name, description, or summary
  *
  * @apiName UpdateChallenge
  * @apiGroup Challenge
@@ -668,7 +666,6 @@ api.exportChallengeCsv = {
  * @apiParam (Body) {String} [challenge.name] The new full name of the challenge.
  * @apiParam (Body) {String} [challenge.summary] The new challenge summary.
  * @apiParam (Body) {String} [challenge.description] The new challenge description.
- * @apiParam (Body) {String} [challenge.leader] The UUID of the new challenge leader.
  *
  * @apiSuccess {Object} data The updated challenge
  * @apiPermission ChallengeLeader

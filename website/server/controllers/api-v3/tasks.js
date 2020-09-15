@@ -23,12 +23,26 @@ import {
 import common from '../../../common';
 import apiError from '../../libs/apiError';
 
-
-function canNotEditTasks (group, user, assignedUserId) {
+// @TODO abstract, see api-v3/tasks/groups.js
+function canNotEditTasks (group, user, assignedUserId, taskPayload = null) {
   const isNotGroupLeader = group.leader !== user._id;
   const isManager = Boolean(group.managers[user._id]);
   const userIsAssigningToSelf = Boolean(assignedUserId && user._id === assignedUserId);
-  return isNotGroupLeader && !isManager && !userIsAssigningToSelf;
+
+  const taskPayloadProps = taskPayload
+    ? Object.keys(taskPayload)
+    : [];
+
+  // only allow collapseChecklist to be changed by everyone
+  const allowedByTaskPayload = taskPayloadProps.length === 1
+    && taskPayloadProps.includes('collapseChecklist');
+
+  if (allowedByTaskPayload) {
+    return false;
+  }
+
+  return isNotGroupLeader && !isManager
+    && !userIsAssigningToSelf;
 }
 
 /**
@@ -103,7 +117,8 @@ const requiredGroupFields = '_id leader tasksOrder name';
  *                                      for "Good habits"-
  * @apiParam (Body) {Boolean} [down=true] Only valid for type "habit" If true, enables
  *                                        the "-" under "Directions/Action" for "Bad habits"
- * @apiParam (Body) {Number} [value=0] Only valid for type "reward." The cost in gold of the reward
+ * @apiParam (Body) {Number} [value=0] Only valid for type "reward." The cost
+ *                                     in gold of the reward. Should be greater then or equal to 0.
  *
  * @apiParamExample {json} Request-Example:
  *     {
@@ -172,6 +187,8 @@ const requiredGroupFields = '_id leader tasksOrder name';
  *                                                     underscores and dashes.
  * @apiError (400) {BadRequest} Value-ValidationFailed `x` is not a valid enum value
  *                                                     for path `(body param)`.
+ * @apiError (400) {BadRequest} Value-ValidationFailed Reward cost should be a
+ *                                                      positive number or 0.`.
  * @apiError (401) {NotAuthorized} NoAccount There is no account that uses those credentials.
  *
  * @apiErrorExample {json} Error-Response:
@@ -200,7 +217,7 @@ api.createUserTasks = {
 
     tasks.forEach(task => {
       // Track when new users (first 7 days) create tasks
-      if (moment().diff(user.auth.timestamps.created, 'days') < 7) {
+      if (moment().diff(user.auth.timestamps.created, 'days') < 7 && user.flags.welcomed) {
         res.analytics.track('task create', {
           uuid: user._id,
           hitType: 'event',
@@ -511,18 +528,20 @@ api.getTask = {
 
     if (!task) {
       throw new NotFound(res.t('taskNotFound'));
+    } else if (task.group.id && !task.userId) {
+      // @TODO: Abstract this access snippet
+      const fields = requiredGroupFields.concat(' managers');
+      const group = await Group.getGroup({ user, groupId: task.group.id, fields });
+      if (!group) throw new NotFound(res.t('taskNotFound'));
 
-    // If the task belongs to a challenge make sure the user has rights
+      const isNotGroupLeader = group.leader !== user._id;
+      if (!group.isMember(user) && isNotGroupLeader) throw new NotFound(res.t('taskNotFound'));
+    // If the task belongs to a challenge make sure the user has rights (leader, admin or members)
     } else if (task.challenge.id && !task.userId) {
-      const challenge = await Challenge.find({ _id: task.challenge.id }).select('leader').exec();
-      if (
-        !challenge
-        || (
-          user.challenges.indexOf(task.challenge.id) === -1
-          && challenge.leader !== user._id
-          && !user.contributor.admin
-        )
-      ) { // eslint-disable-line no-extra-parens
+      const challenge = await Challenge.findOne({ _id: task.challenge.id }).select('leader').exec();
+      // @TODO: Abstract this access snippet
+      if (!challenge) throw new NotFound(res.t('taskNotFound'));
+      if (!challenge.canModify(user) && !challenge.isMember(user)) {
         throw new NotFound(res.t('taskNotFound'));
       }
 
@@ -609,11 +628,11 @@ api.updateTask = {
     if (!task) {
       throw new NotFound(res.t('taskNotFound'));
     } else if (task.group.id && !task.userId) {
-      //  @TODO: Abstract this access snippet
+      // @TODO: Abstract this access snippet
       const fields = requiredGroupFields.concat(' managers');
       group = await Group.getGroup({ user, groupId: task.group.id, fields });
       if (!group) throw new NotFound(res.t('groupNotFound'));
-      if (canNotEditTasks(group, user)) throw new NotAuthorized(res.t('onlyGroupLeaderCanEditTasks'));
+      if (canNotEditTasks(group, user, null, req.body)) throw new NotAuthorized(res.t('onlyGroupLeaderCanEditTasks'));
 
     // If the task belongs to a challenge make sure the user has rights
     } else if (task.challenge.id && !task.userId) {
@@ -636,7 +655,7 @@ api.updateTask = {
     if (!challenge && task.userId && task.challenge && task.challenge.id) {
       sanitizedObj = Tasks.Task.sanitizeUserChallengeTask(updatedTaskObj);
     } else if (!group && task.userId && task.group && task.group.id) {
-      sanitizedObj = Tasks.Task.sanitizeUserChallengeTask(updatedTaskObj);
+      sanitizedObj = Tasks.Task.sanitizeUserGroupTask(updatedTaskObj);
     } else {
       sanitizedObj = Tasks.Task.sanitize(updatedTaskObj);
     }
@@ -654,6 +673,23 @@ api.updateTask = {
     }
     if (sanitizedObj.sharedCompletion) {
       task.group.sharedCompletion = sanitizedObj.sharedCompletion;
+    }
+    if (sanitizedObj.managerNotes) {
+      task.group.managerNotes = sanitizedObj.managerNotes;
+    }
+
+    // If the daily task was set to repeat monthly on a day of the month, and the start date was
+    // updated, the task will then need to be updated to repeat on the same day of the month as the
+    // new start date. For example, if the start date is updated to 7/2/2020, the daily should
+    // repeat on the 2nd day of the month. It's possible that a task can repeat monthly on a
+    // week of the month, in which case we won't update the repetition at all.
+    if (
+      task.type === 'daily'
+      && task.frequency === 'monthly'
+      && task.daysOfMonth.length
+      && task.startDate
+    ) {
+      task.daysOfMonth = [moment(task.startDate).date()];
     }
 
     setNextDue(task, user);
@@ -699,6 +735,9 @@ api.updateTask = {
  * @apiSuccess {Object} data._tmp If an item was dropped it'll be returned in te _tmp object
  * @apiSuccess {Number} data.delta The delta
  *
+ * @apiSuccess (202) {Boolean} data.requiresApproval Approval was requested for team task
+ * @apiSuccess (202) {String} message Acknowledgment of team task approval request
+ *
  * @apiSuccessExample {json} Example result:
  * {"success":true,"data":{"delta":0.9746999906450404,"_tmp":{},"hp":49.06645205596985,
  * "mp":37.2008917491047,"exp":101.93810026267543,"gp":77.09694176716997,
@@ -725,27 +764,31 @@ api.scoreTask = {
   url: '/tasks/:taskId/score/:direction/:yesterdaily?',
   middlewares: [authWithHeaders()],
   async handler (req, res) {
-    req.checkParams('direction', res.t('directionUpDown')).notEmpty().isIn(['up', 'down']);
-
-    const validationErrors = req.validationErrors();
-    if (validationErrors) throw validationErrors;
+    // Parameters are validated in scoreTasks
 
     const { user } = res.locals;
     const { taskId, direction } = req.params;
-    const data = await scoreTasks(user, [{ id: taskId, direction }], req, res);
+    const [taskResponse] = await scoreTasks(user, [{ id: taskId, direction }], req, res);
 
     const userStats = user.stats.toJSON();
-    const resJsonData = _.assign({
-      delta: data.taskResponses[0].delta,
-      _tmp: data.taskResponses[0]._tmp,
-    }, userStats);
-    res.respond(200, resJsonData);
+
+    // group tasks that require a manager's approval
+    if (taskResponse.requiresApproval === true) {
+      res.respond(202, { requiresApproval: true }, taskResponse.message);
+    } else {
+      const resJsonData = _.assign({
+        delta: taskResponse.delta,
+        _tmp: user._tmp,
+      }, userStats);
+
+      res.respond(200, resJsonData);
+    }
   },
 };
 
 /**
  * @api {post} /api/v3/tasks/:taskId/move/to/:position Move a task to a new position
- * @apiDescription Note: completed To-Dos are not sortable,
+ * @apiDescription Note: completed To Do's are not sortable,
  * do not appear in user.tasksOrder.todos, and are ordered by date of completion.
  * @apiName MoveTask
  * @apiGroup Task
@@ -1325,7 +1368,7 @@ api.unlinkOneTask = {
 /**
  * @api {post} /api/v3/tasks/clearCompletedTodos Delete user's completed todos
  * @apiName ClearCompletedTodos
- * @apiDescription Deletes all of a user's completed To-Dos except
+ * @apiDescription Deletes all of a user's completed To Do's except
  * those belonging to active Challenges and Group Plans.
  * @apiGroup Task
  *

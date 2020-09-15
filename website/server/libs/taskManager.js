@@ -1,7 +1,8 @@
 import moment from 'moment';
 import _ from 'lodash';
 import validator from 'validator';
-import * as Tasks from '../models/task'; // eslint-disable-line import/no-cycle
+import * as Tasks from '../models/task';
+import apiError from './apiError';
 import {
   BadRequest,
   NotAuthorized,
@@ -57,7 +58,6 @@ export function setNextDue (task, user, dueDateOption) {
     now = dateTaskIsDue;
   }
 
-
   const optionsForShouldDo = user.preferences.toObject();
   optionsForShouldDo.now = now;
   task.isDue = shared.shouldDo(dateTaskIsDue, task, optionsForShouldDo);
@@ -112,6 +112,7 @@ export async function createTasks (req, res, options = {}) {
         newTask.group.approval.required = true;
       }
       newTask.group.sharedCompletion = taskData.sharedCompletion || SHARED_COMPLETION.default;
+      newTask.group.managerNotes = taskData.managerNotes || '';
     } else {
       newTask.userId = user._id;
 
@@ -119,7 +120,7 @@ export async function createTasks (req, res, options = {}) {
       // are the onboarding ones
       if (!user.achievements.createdTask && user.flags.welcomed) {
         user.addAchievement('createdTask');
-        shared.onboarding.checkOnboardingStatus(user, res.analytics);
+        shared.onboarding.checkOnboardingStatus(user, req, res.analytics);
       }
     }
 
@@ -307,6 +308,47 @@ export function moveTask (order, taskId, to) {
   }
 }
 
+async function handleChallengeTask (task, delta, direction) {
+  if (task.challenge && task.challenge.id && task.challenge.taskId && !task.challenge.broken && task.type !== 'reward') {
+    // Wrapping everything in a try/catch block because if an error occurs
+    // using `await` it MUST NOT bubble up because the request has already been handled
+    try {
+      const chalTask = await Tasks.Task.findOne({
+        _id: task.challenge.taskId,
+      }).exec();
+
+      if (!chalTask) return;
+
+      await chalTask.scoreChallengeTask(delta, direction);
+    } catch (e) {
+      logger.error(e, 'Error scoring challenge task');
+    }
+  }
+}
+
+async function handleGroupTask (task, delta, direction) {
+  if (task.group && task.group.taskId) {
+    // Wrapping everything in a try/catch block because if an error occurs
+    // using `await` it MUST NOT bubble up because the request has already been handled
+    try {
+      const groupTask = await Tasks.Task.findOne({
+        _id: task.group.taskId,
+      }).exec();
+
+      if (groupTask) {
+        await handleSharedCompletion(groupTask, task);
+
+        const groupDelta = groupTask.group.assignedUsers
+          ? delta / groupTask.group.assignedUsers.length
+          : delta;
+        await groupTask.scoreChallengeTask(groupDelta, direction);
+      }
+    } catch (e) {
+      logger.error(e, 'Error scoring group task');
+    }
+  }
+}
+
 /**
  * Scores a task.
  * @param user the user that is making the operation
@@ -324,11 +366,6 @@ async function scoreTask (user, task, direction, req, res) {
     }
   }
 
-  // Set whether we're scoring a yesterdaily from the RYA dialog
-  if (req.params.yesterdaily && req.params.yesterdaily === 'yesterdaily') {
-    task.yesterDailyScored = true;
-  }
-
   if (task.group.approval.required && !task.group.approval.approved) {
     const fields = requiredGroupFields.concat(' managers');
     const group = await Group.getGroup({ user, groupId: task.group.id, fields });
@@ -342,7 +379,11 @@ async function scoreTask (user, task, direction, req, res) {
       task.group.approval.requestedDate = new Date();
     } else {
       if (task.group.approval.requested) {
-        throw new NotAuthorized(res.t('taskRequiresApproval'));
+        return {
+          task,
+          requiresApproval: true,
+          message: res.t('taskRequiresApproval'),
+        };
       }
 
       task.group.approval.requested = true;
@@ -350,8 +391,8 @@ async function scoreTask (user, task, direction, req, res) {
 
       const managers = await User.find({ _id: managerIds }, 'notifications preferences').exec(); // Use this method so we can get access to notifications
 
-      // @TODO: we can use the User.pushNotification function because we need to ensure
-      // notifications are translated
+      // @TODO: we can use the User.pushNotification function because
+      // we need to ensure notifications are translated
       const managerPromises = [];
       managers.forEach(manager => {
         manager.addNotification('GROUP_TASK_APPROVAL', {
@@ -372,20 +413,34 @@ async function scoreTask (user, task, direction, req, res) {
       managerPromises.push(task.save());
       await Promise.all(managerPromises);
 
-      throw new NotAuthorized(res.t('taskApprovalHasBeenRequested'));
+      return {
+        task,
+        requiresApproval: true,
+        message: res.t('taskApprovalHasBeenRequested'),
+      };
     }
   }
+
+  if (task.group.approval.required && task.group.approval.approved) {
+    const notificationIndex = user.notifications.findIndex(notification => notification
+       && notification.data && notification.data.task
+       && notification.data.task._id === task._id && notification.type === 'GROUP_TASK_APPROVED');
+
+    if (notificationIndex !== -1) {
+      user.notifications.splice(notificationIndex, 1);
+    }
+  }
+
   const wasCompleted = task.completed;
 
   const firstTask = !user.achievements.completedTask;
-  const [delta] = shared.ops.scoreTask({ task, user, direction }, req);
-  // Drop system (don't run on the client, as it would only be discarded since
-  // ops are sent to the API, not the results)
+  const [delta] = shared.ops.scoreTask({ task, user, direction }, req, res.analytics);
+  // Drop system (don't run on the client,
+  // as it would only be discarded since ops are sent to the API, not the results)
   if (direction === 'up' && !firstTask) shared.fns.randomDrop(user, { task, delta }, req, res.analytics);
 
   // If a todo was completed or uncompleted move it in or out of the user.tasksOrder.todos list
   // TODO move to common code?
-  let taskOrderPromise;
   let pullTask = false;
   let pushTask = false;
   if (task.type === 'todo') {
@@ -394,7 +449,11 @@ async function scoreTask (user, task, direction, req, res) {
       // our concurrency issues. If not, we need to use this update $pull and $push
       pullTask = true;
       // user.tasksOrder.todos.pull(task._id);
-    } else if (wasCompleted && !task.completed && user.tasksOrder.todos.indexOf(task._id) === -1) {
+    } else if (
+      wasCompleted
+      && !task.completed
+      && user.tasksOrder.todos.indexOf(task._id) === -1
+    ) {
       pushTask = true;
       // user.tasksOrder.todos.push(task._id);
     }
@@ -410,7 +469,7 @@ async function scoreTask (user, task, direction, req, res) {
   });
 
   // Track when new users (first 7 days) score tasks
-  if (moment().diff(user.auth.timestamps.created, 'days') < 7 && user.flags.welcomed) {
+  if (moment().diff(user.auth.timestamps.created, 'days') < 7) {
     res.analytics.track('task score', {
       uuid: user._id,
       hitType: 'event',
@@ -420,59 +479,35 @@ async function scoreTask (user, task, direction, req, res) {
       headers: req.headers,
     });
   }
+
   return {
-    user,
     task,
     delta,
     direction,
-    taskOrderPromise,
     pullTask,
     pushTask,
+    // clone user._tmp so that it's not overwritten by other score operations
+    // when using the bulk scoring API
     _tmp: _.cloneDeep(user._tmp),
   };
 }
 
-async function handleChallengeTask (task, delta, direction) {
-  if (task.challenge && task.challenge.id && task.challenge.taskId && !task.challenge.broken && task.type !== 'reward') {
-    // Wrapping everything in a try/catch block because if an error
-    // occurs using `await` it MUST NOT bubble up because the request has already been handled
-    try {
-      const chalTask = await Tasks.Task.findOne({
-        _id: task.challenge.taskId,
-      }).exec();
-
-      if (!chalTask) return;
-
-      await chalTask.scoreChallengeTask(delta, direction);
-    } catch (e) {
-      logger.error(e);
-    }
-  }
-}
-
-async function handleGroupTask (task, delta, direction) {
-  if (task.group && task.group.taskId) {
-    await handleSharedCompletion(task);
-    try {
-      const groupTask = await Tasks.Task.findOne({
-        _id: task.group.taskId,
-      }).exec();
-
-      if (groupTask) {
-        const groupDelta = groupTask.group.assignedUsers
-          ? delta / groupTask.group.assignedUsers.length
-          : delta;
-        await groupTask.scoreChallengeTask(groupDelta, direction);
-      }
-    } catch (e) {
-      logger.error(e);
-    }
-  }
-}
-
 export async function scoreTasks (user, taskScorings, req, res) {
-  const taskIds = taskScorings.map(taskScoring => taskScoring.id).filter(id => id !== undefined);
-  if (taskIds.length === 0) throw new BadRequest(res.t('taskNotFound'));
+  // Validate the parameters
+
+  // taskScorings must be array with at least one value
+  if (!taskScorings || !Array.isArray(taskScorings) || taskScorings.length < 1) {
+    throw new BadRequest(apiError('invalidTaskScorings'));
+  }
+
+  taskScorings.forEach(({ id, direction }) => {
+    if (!['up', 'down'].includes(direction)) throw new BadRequest(apiError('directionUpDown'));
+    if (typeof id !== 'string') throw new BadRequest(apiError('invalidTaskIdentifier'));
+  });
+
+  // Get an array of tasks identifiers
+  const taskIds = taskScorings.map(taskScoring => taskScoring.id);
+
   const tasks = {};
   (await Tasks.Task.findMultipleByIdOrAlias(taskIds, user._id)).forEach(task => {
     tasks[task._id] = task;
@@ -480,22 +515,51 @@ export async function scoreTasks (user, taskScorings, req, res) {
       tasks[task.alias] = task;
     }
   });
+
   if (Object.keys(tasks).length === 0) throw new NotFound(res.t('taskNotFound'));
-  const scorePromises = [];
-  taskScorings.forEach(taskScoring => {
-    if (tasks[taskScoring.id]) {
-      scorePromises.push(scoreTask(user, tasks[taskScoring.id], taskScoring.direction, req, res));
+
+  // Score each task separately to make sure changes to user._tmp don't overlap.
+  // scoreTask is an async function but the only async operation happens when a group task
+  // is involved
+  // @TODO refactor user._tmp to allow more than one task scoring - breaking change
+  const returnDatas = [];
+
+  for (const taskScoring of taskScorings) {
+    const task = tasks[taskScoring.id];
+    if (task) {
+      // If one of the task scoring fails the entire operation will result in a failure
+      // It's the only way to ensure the user doesn't end up in an inconsistent state.
+      returnDatas.push(await scoreTask( // eslint-disable-line no-await-in-loop
+        user,
+        task,
+        taskScoring.direction,
+        req,
+        res,
+      ));
+    }
+  }
+
+  const savePromises = [user.save()];
+
+  // Save the tasks, use the tasks object and not returnDatas.*.task to avoid saving the same
+  // task twice, allows scoring the same task multiple times in a single request
+  Object.keys(tasks).forEach(identifier => {
+    // Tasks identified by an alias exists with two keys (id and alias) in the tasks object
+    // ignore the alias to avoid saving them twice
+    if (validator.isUUID(String(identifier)) && tasks[identifier].isModified()) {
+      savePromises.push(tasks[identifier].save());
     }
   });
-  const returnDatas = await Promise.all(scorePromises);
 
-  const savePromises = [returnDatas[returnDatas.length - 1].user.save()];
+  // Handle todos removal or addition to the tasksOrder array
   const pullIDs = [];
   const pushIDs = [];
+
   returnDatas.forEach(returnData => {
-    if (returnData.pushTask) pushIDs.push(returnData.task._id);
-    if (returnData.pullTask) pullIDs.push(returnData.task._id);
+    if (returnData.pushTask === true) pushIDs.push(returnData.task._id);
+    if (returnData.pullTask === true) pullIDs.push(returnData.task._id);
   });
+
   const moveUpdateObject = {};
   if (pushIDs.length > 0) moveUpdateObject.$push = { 'tasksOrder.todos': { $each: pushIDs } };
   if (pullIDs.length > 0) moveUpdateObject.$pull = { 'tasksOrder.todos': { $in: pullIDs } };
@@ -503,22 +567,20 @@ export async function scoreTasks (user, taskScorings, req, res) {
     savePromises.push(user.updateOne(moveUpdateObject).exec());
   }
 
-  Object.keys(tasks).forEach(identifier => {
-    if (validator.isUUID(String(identifier))) {
-      savePromises.push(tasks[identifier].save());
-    }
-  });
-  // Save results and handle request
-  const results = await Promise.all(savePromises);
+  await Promise.all(savePromises);
 
-  const response = { user: results[0], taskResponses: [] };
-
-  response.taskResponses = returnDatas.map(data => {
-    // Handle challenge tasks here so we save on one for loop
+  return returnDatas.map(data => {
+    // Handle challenge and group tasks tasks here because the task must have been saved first
     handleChallengeTask(data.task, data.delta, data.direction);
     handleGroupTask(data.task, data.delta, data.direction);
 
+    // Handle group tasks that require approval
+    if (data.requiresApproval === true) {
+      return {
+        id: data.task._id, message: data.message, requiresApproval: true,
+      };
+    }
+
     return { id: data.task._id, delta: data.delta, _tmp: data._tmp };
   });
-  return response;
 }

@@ -2,7 +2,8 @@
   <div>
     <yesterdaily-modal
       :yester-dailies="yesterDailies"
-      @run-cron="runYesterDailiesAction()"
+      :cron-action="runCronAction"
+      @hidden="afterYesterdailies()"
     />
     <armoire-empty />
     <new-stuff />
@@ -116,7 +117,7 @@ import { mapState } from '@/libs/store';
 import notifications from '@/mixins/notifications';
 import guide from '@/mixins/guide';
 
-import yesterdailyModal from './yesterdailyModal';
+import yesterdailyModal from './tasks/yesterdailyModal';
 import newStuff from './achievements/newStuff';
 import death from './achievements/death';
 import lowHealth from './achievements/lowHealth';
@@ -170,6 +171,7 @@ const NOTIFICATIONS = {
     achievement: true,
     label: $t => $t('modalContribAchievement'),
     modalId: 'contributor',
+    sticky: true,
   },
   ACHIEVEMENT_ALL_YOUR_BASE: {
     achievement: true,
@@ -310,6 +312,46 @@ const NOTIFICATIONS = {
       achievement: 'rosyOutlook', // defined manually until the server sends all the necessary data
     },
   },
+  ACHIEVEMENT_BUG_BONANZA: {
+    achievement: true,
+    label: $t => `${$t('achievement')}: ${$t('achievementBugBonanza')}`,
+    modalId: 'generic-achievement',
+    data: {
+      achievement: 'bugBonanza', // defined manually until the server sends all the necessary data
+    },
+  },
+  ACHIEVEMENT_BARE_NECESSITIES: {
+    achievement: true,
+    label: $t => `${$t('achievement')}: ${$t('achievementBareNecessities')}`,
+    modalId: 'generic-achievement',
+    data: {
+      achievement: 'bareNecessities', // defined manually until the server sends all the necessary data
+    },
+  },
+  ACHIEVEMENT_FRESHWATER_FRIENDS: {
+    achievement: true,
+    label: $t => `${$t('achievement')}: ${$t('achievementFreshwaterFriends')}`,
+    modalId: 'generic-achievement',
+    data: {
+      achievement: 'freshwaterFriends', // defined manually until the server sends all the necessary data
+    },
+  },
+  ACHIEVEMENT_GOOD_AS_GOLD: {
+    achievement: true,
+    label: $t => `${$t('achievement')}: ${$t('achievementGoodAsGold')}`,
+    modalId: 'generic-achievement',
+    data: {
+      achievement: 'goodAsGold', // defined manually until the server sends all the necessary data
+    },
+  },
+  ACHIEVEMENT_ALL_THAT_GLITTERS: {
+    achievement: true,
+    label: $t => `${$t('achievement')}: ${$t('achievementAllThatGlitters')}`,
+    modalId: 'generic-achievement',
+    data: {
+      achievement: 'allThatGlitters', // defined manually until the server sends all the necessary data
+    },
+  },
 };
 
 export default {
@@ -347,7 +389,7 @@ export default {
   data () {
     // Levels that already display modals and should not trigger generic Level Up
     const unlockLevels = {
-      10: 'class system',
+      10: 'Class system',
       50: 'Orb of Rebirth',
     };
 
@@ -363,12 +405,13 @@ export default {
       'GUILD_PROMPT', 'REBIRTH_ENABLED', 'WON_CHALLENGE', 'STREAK_ACHIEVEMENT',
       'ULTIMATE_GEAR_ACHIEVEMENT', 'REBIRTH_ACHIEVEMENT', 'GUILD_JOINED_ACHIEVEMENT',
       'CHALLENGE_JOINED_ACHIEVEMENT', 'INVITED_FRIEND_ACHIEVEMENT', 'NEW_CONTRIBUTOR_LEVEL',
-      'CRON', 'SCORED_TASK', 'LOGIN_INCENTIVE', 'ACHIEVEMENT_ALL_YOUR_BASE', 'ACHIEVEMENT_BACK_TO_BASICS',
+      'CRON', 'LOGIN_INCENTIVE', 'ACHIEVEMENT_ALL_YOUR_BASE', 'ACHIEVEMENT_BACK_TO_BASICS',
       'GENERIC_ACHIEVEMENT', 'ACHIEVEMENT_PARTY_UP', 'ACHIEVEMENT_PARTY_ON', 'ACHIEVEMENT_BEAST_MASTER',
       'ACHIEVEMENT_MOUNT_MASTER', 'ACHIEVEMENT_TRIAD_BINGO', 'ACHIEVEMENT_DUST_DEVIL', 'ACHIEVEMENT_ARID_AUTHORITY',
       'ACHIEVEMENT_MONSTER_MAGUS', 'ACHIEVEMENT_UNDEAD_UNDERTAKER', 'ACHIEVEMENT_PRIMED_FOR_PAINTING',
       'ACHIEVEMENT_PEARLY_PRO', 'ACHIEVEMENT_TICKLED_PINK', 'ACHIEVEMENT_ROSY_OUTLOOK', 'ACHIEVEMENT',
-      'ONBOARDING_COMPLETE', 'FIRST_DROPS',
+      'ONBOARDING_COMPLETE', 'FIRST_DROPS', 'ACHIEVEMENT_BUG_BONANZA', 'ACHIEVEMENT_BARE_NECESSITIES',
+      'ACHIEVEMENT_FRESHWATER_FRIENDS', 'ACHIEVEMENT_GOOD_AS_GOLD', 'ACHIEVEMENT_ALL_THAT_GLITTERS',
     ].forEach(type => {
       handledNotifications[type] = true;
     });
@@ -380,7 +423,6 @@ export default {
       unlockLevels,
       lastShownNotifications,
       alreadyReadNotification,
-      isRunningYesterdailies: false,
       nextCron: null,
       handledNotifications,
     };
@@ -432,6 +474,10 @@ export default {
 
       const money = after - before;
       let bonus;
+      // NOTE: the streak bonus snackbar
+      // is not shown when bulk scoring (for example in the RYA modal)
+      // is used as it bypass the client side scoring
+      // and doesn't populate the _tmp object
       if (this.user._tmp) {
         bonus = this.user._tmp.streakBonus || 0;
       }
@@ -544,7 +590,7 @@ export default {
         this.text(config.label(this.$t), () => {
           this.notificationData = data;
           this.$root.$emit('bv::show::modal', config.modalId);
-        }, true, 10000);
+        }, !config.sticky, 10000);
       }
     },
     debounceCheckUserAchievements: debounce(function debounceCheck () {
@@ -574,6 +620,7 @@ export default {
       }
 
       // Lvl evaluation
+      // @TODO use LEVELED_UP notification, would remove the need to check for yesterdailies
       if (afterLvl !== beforeLvl) {
         if (afterLvl <= beforeLvl || this.$store.state.isRunningYesterdailies) return;
         this.showLevelUpNotifications(afterLvl);
@@ -614,8 +661,7 @@ export default {
     showLevelUpNotifications (newlevel) {
       this.lvl();
       this.playSound('Level_Up');
-      if (this.user._tmp && this.user._tmp.drop && this.user._tmp.drop.type === 'Quest') return;
-      if (this.unlockLevels[`${newlevel}`]) return;
+      if (this.unlockLevels[newlevel]) return;
       if (!this.user.preferences.suppressModals.levelUp) this.$root.$emit('bv::show::modal', 'level-up');
     },
     playSound (sound) {
@@ -649,15 +695,13 @@ export default {
 
       // Setup a listener that executes 10 seconds after the next cron time
       this.nextCron = Number(nextCron.format('x'));
-      this.$store.state.isRunningYesterdailies = false;
     },
     async runYesterDailies () {
       if (this.$store.state.isRunningYesterdailies) return;
       this.$store.state.isRunningYesterdailies = true;
 
       if (!this.user.needsCron) {
-        this.scheduleNextCron();
-        this.handleUserNotifications(this.user.notifications);
+        this.afterYesterdailies();
         return;
       }
 
@@ -678,25 +722,25 @@ export default {
       });
 
       if (this.yesterDailies.length === 0) {
-        this.runYesterDailiesAction();
-        return;
+        await this.runCronAction();
+        this.afterYesterdailies();
+      } else {
+        this.levelBeforeYesterdailies = this.user.stats.lvl;
+        this.$root.$emit('bv::show::modal', 'yesterdaily');
       }
-
-      this.levelBeforeYesterdailies = this.user.stats.lvl;
-      this.$root.$emit('bv::show::modal', 'yesterdaily');
     },
-    async runYesterDailiesAction () {
+    async runCronAction () {
       // Run Cron
       await axios.post('/api/v4/cron');
-
-      // Notifications
 
       // Sync
       await Promise.all([
         this.$store.dispatch('user:fetch', { forceLoad: true }),
         this.$store.dispatch('tasks:fetchUserTasks', { forceLoad: true }),
       ]);
-
+    },
+    afterYesterdailies () {
+      this.scheduleNextCron();
       this.$store.state.isRunningYesterdailies = false;
 
       if (
@@ -705,8 +749,6 @@ export default {
       ) {
         this.showLevelUpNotifications(this.user.stats.lvl);
       }
-
-      this.scheduleNextCron();
       this.handleUserNotifications(this.user.notifications);
     },
     async handleUserNotifications (after) {
@@ -715,7 +757,6 @@ export default {
       if (!after || after.length === 0 || !Array.isArray(after)) return;
 
       const notificationsToRead = [];
-      const scoreTaskNotification = [];
 
       after.forEach(notification => {
         // This notification type isn't implemented here
@@ -785,6 +826,11 @@ export default {
           case 'ACHIEVEMENT_PEARLY_PRO':
           case 'ACHIEVEMENT_TICKLED_PINK':
           case 'ACHIEVEMENT_ROSY_OUTLOOK':
+          case 'ACHIEVEMENT_BUG_BONANZA':
+          case 'ACHIEVEMENT_BARE_NECESSITIES':
+          case 'ACHIEVEMENT_FRESHWATER_FRIENDS':
+          case 'ACHIEVEMENT_GOOD_AS_GOLD':
+          case 'ACHIEVEMENT_ALL_THAT_GLITTERS':
           case 'GENERIC_ACHIEVEMENT':
             this.showNotificationWithModal(notification);
             break;
@@ -801,27 +847,8 @@ export default {
             break;
           }
           case 'CRON':
-            if (notification.data) {
-              if (notification.data.hp) this.hp(notification.data.hp, 'hp');
-              if (notification.data.mp && this.userHasClass) this.mp(notification.data.mp);
-            }
-            break;
-          case 'SCORED_TASK':
-            // Search if it is a read notification
-            for (let i = 0; i < this.alreadyReadNotification.length; i += 1) {
-              if (this.alreadyReadNotification[i] === notification.id) {
-                markAsRead = false; // Do not let it be read again
-                break;
-              }
-            }
-
-            // Only process the notification if it is an unread notification
-            if (markAsRead) {
-              scoreTaskNotification.push(notification);
-
-              // Add to array of read notifications
-              this.alreadyReadNotification.push(notification.id);
-            }
+            // Not needed because it's shown already by the userHp and userMp watchers
+            // Keeping an empty block so that it gets read
             break;
           case 'LOGIN_INCENTIVE':
             if (this.user.flags.tour.intro === this.TOUR_END && this.user.flags.welcomed) {
@@ -848,40 +875,9 @@ export default {
         if (markAsRead) notificationsToRead.push(notification.id);
       });
 
-      const userReadNotifsPromise = false;
-
       if (notificationsToRead.length > 0) {
         await axios.post('/api/v4/notifications/read', {
           notificationIds: notificationsToRead,
-        });
-      }
-
-      // @TODO this code is never run because userReadNotifsPromise is never true
-      if (userReadNotifsPromise) {
-        userReadNotifsPromise.then(() => {
-          // Only run this code for scoring approved tasks
-          if (scoreTaskNotification.length > 0) {
-            const approvedTasks = [];
-            for (let i = 0; i < scoreTaskNotification.length; i += 1) {
-              // Array with all approved tasks
-              const scoreData = scoreTaskNotification[i].data;
-              let direction = 'up';
-              if (scoreData.direction) direction = scoreData.direction;
-
-              approvedTasks.push({
-                params: {
-                  task: scoreData.scoreTask,
-                  direction,
-                },
-              });
-
-              // Show notification of task approved
-              this.markdown(scoreTaskNotification[i].data.message);
-            }
-
-            // Score approved tasks
-            // TODO: User.bulkScore(approvedTasks);
-          }
         });
       }
 

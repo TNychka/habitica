@@ -41,14 +41,14 @@ describe('cron', () => {
     analytics.track.restore();
   });
 
-  it('updates user.preferences.timezoneOffsetAtLastCron', async () => {
-    const timezoneOffsetFromUserPrefs = 1;
+  it('updates user.preferences.timezoneOffsetAtLastCron', () => {
+    const timezoneUtcOffsetFromUserPrefs = -1;
 
-    await cron({
-      user, tasksByType, daysMissed, analytics, timezoneOffsetFromUserPrefs,
+    cron({
+      user, tasksByType, daysMissed, analytics, timezoneUtcOffsetFromUserPrefs,
     });
 
-    expect(user.preferences.timezoneOffsetAtLastCron).to.equal(timezoneOffsetFromUserPrefs);
+    expect(user.preferences.timezoneOffsetAtLastCron).to.equal(1);
   });
 
   it('resets user.items.lastDrop.count', async () => {
@@ -239,8 +239,8 @@ describe('cron', () => {
       user1.purchased.plan.consecutive.trinkets = 0;
       user1.purchased.plan.consecutive.gemCapExtra = 0;
 
-      it('does not increment consecutive benefits after the first month', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(1, 'months')
+      it('does not increment consecutive benefits after the first month', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(1, 'months')
           .add(2, 'days')
           .toDate());
         // Add 1 month to simulate what happens a month after the subscription was created.
@@ -255,8 +255,8 @@ describe('cron', () => {
         expect(user1.purchased.plan.consecutive.gemCapExtra).to.equal(0);
       });
 
-      it('does not increment consecutive benefits after the second month', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(2, 'months')
+      it('does not increment consecutive benefits after the second month', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(2, 'months')
           .add(2, 'days')
           .toDate());
         // Add 1 month to simulate what happens a month after the subscription was created.
@@ -271,8 +271,8 @@ describe('cron', () => {
         expect(user1.purchased.plan.consecutive.gemCapExtra).to.equal(0);
       });
 
-      it('increments consecutive benefits after the third month', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(3, 'months')
+      it('increments consecutive benefits after the third month', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(3, 'months')
           .add(2, 'days')
           .toDate());
         // Add 1 month to simulate what happens a month after the subscription was created.
@@ -287,8 +287,8 @@ describe('cron', () => {
         expect(user1.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('does not increment consecutive benefits after the fourth month', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(4, 'months')
+      it('does not increment consecutive benefits after the fourth month', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(4, 'months')
           .add(2, 'days')
           .toDate());
         // Add 1 month to simulate what happens a month after the subscription was created.
@@ -303,8 +303,8 @@ describe('cron', () => {
         expect(user1.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('increments consecutive benefits correctly if user has been absent with continuous subscription', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(10, 'months')
+      it('increments consecutive benefits correctly if user has been absent with continuous subscription', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(10, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -338,8 +338,8 @@ describe('cron', () => {
       user3.purchased.plan.consecutive.trinkets = 1;
       user3.purchased.plan.consecutive.gemCapExtra = 5;
 
-      it('does not increment consecutive benefits in the first month of the first paid period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(1, 'months')
+      it('does not increment consecutive benefits in the first month of the first paid period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(1, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -351,8 +351,8 @@ describe('cron', () => {
         expect(user3.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('does not increment consecutive benefits in the middle of the period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(2, 'months')
+      it('does not increment consecutive benefits in the middle of the period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(2, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -364,8 +364,8 @@ describe('cron', () => {
         expect(user3.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('does not increment consecutive benefits in the final month of the period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(3, 'months')
+      it('does not increment consecutive benefits in the final month of the period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(3, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -377,8 +377,8 @@ describe('cron', () => {
         expect(user3.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('increments consecutive benefits the month after the second paid period has started', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(4, 'months')
+      it('increments consecutive benefits the month after the second paid period has started', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(4, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -390,8 +390,8 @@ describe('cron', () => {
         expect(user3.purchased.plan.consecutive.gemCapExtra).to.equal(10);
       });
 
-      it('does not increment consecutive benefits in the second month of the second period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(5, 'months')
+      it('does not increment consecutive benefits in the second month of the second period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(5, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -403,8 +403,8 @@ describe('cron', () => {
         expect(user3.purchased.plan.consecutive.gemCapExtra).to.equal(10);
       });
 
-      it('does not increment consecutive benefits in the final month of the second period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(6, 'months')
+      it('does not increment consecutive benefits in the final month of the second period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(6, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -416,8 +416,8 @@ describe('cron', () => {
         expect(user3.purchased.plan.consecutive.gemCapExtra).to.equal(10);
       });
 
-      it('increments consecutive benefits the month after the third paid period has started', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(7, 'months')
+      it('increments consecutive benefits the month after the third paid period has started', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(7, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -429,8 +429,8 @@ describe('cron', () => {
         expect(user3.purchased.plan.consecutive.gemCapExtra).to.equal(15);
       });
 
-      it('increments consecutive benefits correctly if user has been absent with continuous subscription', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(10, 'months')
+      it('increments consecutive benefits correctly if user has been absent with continuous subscription', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(10, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -464,8 +464,8 @@ describe('cron', () => {
       user6.purchased.plan.consecutive.trinkets = 2;
       user6.purchased.plan.consecutive.gemCapExtra = 10;
 
-      it('does not increment consecutive benefits in the first month of the first paid period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(1, 'months')
+      it('does not increment consecutive benefits in the first month of the first paid period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(1, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -477,8 +477,8 @@ describe('cron', () => {
         expect(user6.purchased.plan.consecutive.gemCapExtra).to.equal(10);
       });
 
-      it('does not increment consecutive benefits in the final month of the period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(6, 'months')
+      it('does not increment consecutive benefits in the final month of the period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(6, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -490,8 +490,8 @@ describe('cron', () => {
         expect(user6.purchased.plan.consecutive.gemCapExtra).to.equal(10);
       });
 
-      it('increments consecutive benefits the month after the second paid period has started', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(7, 'months')
+      it('increments consecutive benefits the month after the second paid period has started', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(7, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -503,8 +503,8 @@ describe('cron', () => {
         expect(user6.purchased.plan.consecutive.gemCapExtra).to.equal(20);
       });
 
-      it('increments consecutive benefits the month after the third paid period has started', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(13, 'months')
+      it('increments consecutive benefits the month after the third paid period has started', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(13, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -516,8 +516,8 @@ describe('cron', () => {
         expect(user6.purchased.plan.consecutive.gemCapExtra).to.equal(25);
       });
 
-      it('increments consecutive benefits correctly if user has been absent with continuous subscription', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(19, 'months')
+      it('increments consecutive benefits correctly if user has been absent with continuous subscription', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(19, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -551,8 +551,8 @@ describe('cron', () => {
       user12.purchased.plan.consecutive.trinkets = 4;
       user12.purchased.plan.consecutive.gemCapExtra = 20;
 
-      it('does not increment consecutive benefits in the first month of the first paid period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(1, 'months')
+      it('does not increment consecutive benefits in the first month of the first paid period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(1, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -564,8 +564,8 @@ describe('cron', () => {
         expect(user12.purchased.plan.consecutive.gemCapExtra).to.equal(20);
       });
 
-      it('does not increment consecutive benefits in the final month of the period that they already have benefits for', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(12, 'months')
+      it('does not increment consecutive benefits in the final month of the period that they already have benefits for', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(12, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -577,8 +577,8 @@ describe('cron', () => {
         expect(user12.purchased.plan.consecutive.gemCapExtra).to.equal(20);
       });
 
-      it('increments consecutive benefits the month after the second paid period has started', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(13, 'months')
+      it('increments consecutive benefits the month after the second paid period has started', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(13, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -590,8 +590,8 @@ describe('cron', () => {
         expect(user12.purchased.plan.consecutive.gemCapExtra).to.equal(25);
       });
 
-      it('increments consecutive benefits the month after the third paid period has started', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(25, 'months')
+      it('increments consecutive benefits the month after the third paid period has started', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(25, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -603,8 +603,8 @@ describe('cron', () => {
         expect(user12.purchased.plan.consecutive.gemCapExtra).to.equal(25);
       });
 
-      it('increments consecutive benefits correctly if user has been absent with continuous subscription', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(37, 'months')
+      it('increments consecutive benefits correctly if user has been absent with continuous subscription', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(37, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -640,8 +640,8 @@ describe('cron', () => {
       user3g.purchased.plan.consecutive.trinkets = 1;
       user3g.purchased.plan.consecutive.gemCapExtra = 5;
 
-      it('does not increment consecutive benefits in the first month of the gift subscription', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(1, 'months')
+      it('does not increment consecutive benefits in the first month of the gift subscription', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(1, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -653,8 +653,8 @@ describe('cron', () => {
         expect(user3g.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('does not increment consecutive benefits in the second month of the gift subscription', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(2, 'months')
+      it('does not increment consecutive benefits in the second month of the gift subscription', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(2, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -666,8 +666,8 @@ describe('cron', () => {
         expect(user3g.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('does not increment consecutive benefits in the third month of the gift subscription', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(3, 'months')
+      it('does not increment consecutive benefits in the third month of the gift subscription', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(3, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -679,8 +679,8 @@ describe('cron', () => {
         expect(user3g.purchased.plan.consecutive.gemCapExtra).to.equal(5);
       });
 
-      it('does not increment consecutive benefits in the month after the gift subscription has ended', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(4, 'months')
+      it('does not increment consecutive benefits in the month after the gift subscription has ended', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(4, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -716,8 +716,8 @@ describe('cron', () => {
       user6x.purchased.plan.consecutive.trinkets = 3;
       user6x.purchased.plan.consecutive.gemCapExtra = 15;
 
-      it('increments consecutive benefits in the first month since the fix for #4819 goes live', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(1, 'months')
+      it('increments consecutive benefits in the first month since the fix for #4819 goes live', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(1, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -729,8 +729,8 @@ describe('cron', () => {
         expect(user6x.purchased.plan.consecutive.gemCapExtra).to.equal(25);
       });
 
-      it('does not increment consecutive benefits in the second month after the fix goes live', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(2, 'months')
+      it('does not increment consecutive benefits in the second month after the fix goes live', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(2, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -742,8 +742,8 @@ describe('cron', () => {
         expect(user6x.purchased.plan.consecutive.gemCapExtra).to.equal(25);
       });
 
-      it('does not increment consecutive benefits in the third month after the fix goes live', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(3, 'months')
+      it('does not increment consecutive benefits in the third month after the fix goes live', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(3, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -755,8 +755,8 @@ describe('cron', () => {
         expect(user6x.purchased.plan.consecutive.gemCapExtra).to.equal(25);
       });
 
-      it('increments consecutive benefits in the seventh month after the fix goes live', async () => {
-        clock = sinon.useFakeTimers(moment().zone(0).startOf('month').add(7, 'months')
+      it('increments consecutive benefits in the seventh month after the fix goes live', () => {
+        clock = sinon.useFakeTimers(moment().utcOffset(0).startOf('month').add(7, 'months')
           .add(2, 'days')
           .toDate());
         await cron({
@@ -885,7 +885,12 @@ describe('cron', () => {
       tasksByType.todos.push(task);
     });
 
-    it('should make uncompleted todos redder', async () => {
+    afterEach(() => {
+      tasksByType.todos = [];
+      user.tasksOrder.todos = [];
+    });
+
+    it('should make uncompleted todos redder', () => {
       const valueBefore = tasksByType.todos[0].value;
       await cron({
         user, tasksByType, daysMissed, analytics,
@@ -893,7 +898,16 @@ describe('cron', () => {
       expect(tasksByType.todos[0].value).to.be.lessThan(valueBefore);
     });
 
-    it('should add history of completed todos to user history', async () => {
+    it('should not make completed todos redder', () => {
+      tasksByType.todos[0].completed = true;
+      const valueBefore = tasksByType.todos[0].value;
+      cron({
+        user, tasksByType, daysMissed, analytics,
+      });
+      expect(tasksByType.todos[0].value).to.equal(valueBefore);
+    });
+
+    it('should add history of completed todos to user history', () => {
       tasksByType.todos[0].completed = true;
 
       await cron({
@@ -903,18 +917,14 @@ describe('cron', () => {
       expect(user.history.todos).to.be.lengthOf(1);
     });
 
-    it('should remove completed todos from users taskOrder list', async () => {
-      tasksByType.todos = [];
-      user.tasksOrder.todos = [];
+    it('should remove completed todos from users taskOrder list', () => {
       const todo = {
         text: 'test todo',
         type: 'todo',
         value: 0,
       };
 
-      let task = new Tasks.todo(Tasks.Task.sanitize(todo)); // eslint-disable-line new-cap
-      tasksByType.todos.push(task);
-      task = new Tasks.todo(Tasks.Task.sanitize(todo)); // eslint-disable-line new-cap
+      const task = new Tasks.todo(Tasks.Task.sanitize(todo)); // eslint-disable-line new-cap
       tasksByType.todos.push(task);
       tasksByType.todos[0].completed = true;
 
@@ -936,9 +946,7 @@ describe('cron', () => {
       expect(user.tasksOrder.todos).to.be.lengthOf(1);
     });
 
-    it('should preserve todos order in task list', async () => {
-      tasksByType.todos = [];
-      user.tasksOrder.todos = [];
+    it('should preserve todos order in task list', () => {
       const todo = {
         text: 'test todo',
         type: 'todo',

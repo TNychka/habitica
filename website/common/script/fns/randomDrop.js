@@ -37,6 +37,7 @@ export default function randomDrop (user, options, req = {}, analytics) {
     size(user.items.eggs) < 1
     && size(user.items.hatchingPotions) < 1
   ) {
+    // @TODO why are we using both _tmp.firstDrops and the FIRST_DROPS notification?
     user._tmp.firstDrops = firstDrops(user);
     return;
   }
@@ -46,6 +47,8 @@ export default function randomDrop (user, options, req = {}, analytics) {
 
   let chance = min([Math.abs(task.value - 21.27), 37.5]) / 150 + 0.02;
   chance *= task.priority // Task priority: +50% for Medium, +100% for Hard
+    // start users with +75% drops, diminishing by 5% per level gained
+    * (1 + Math.max(0, 80 - (5 * user.stats.lvl)) / 100)
     * (1 + (task.streak / 100 || 0)) // Streak bonus: +1% per streak
     * (1 + statsComputed(user).per / 100) // PERception: +1% per point
     * (1 + (user.contributor.level / 40 || 0)) // Contrib levels: +2.5% per level
@@ -82,10 +85,12 @@ export default function randomDrop (user, options, req = {}, analytics) {
     return;
   }
 
-  if (predictableRandom() < chance) {
+  const firstFoodDrop = size(user.items.food) < 1;
+
+  if (firstFoodDrop || predictableRandom() < chance) {
     rarity = predictableRandom();
 
-    if (rarity > 0.6) { // food 40% chance
+    if (firstFoodDrop || rarity > 0.6) { // food 40% chance
       drop = cloneDropItem(randomVal(filter(content.food, {
         canDrop: true,
       })));
@@ -146,6 +151,11 @@ export default function randomDrop (user, options, req = {}, analytics) {
       }, req.language);
     }
 
+    // @TODO use notifications
+    user._tmp.drop = drop;
+    user.items.lastDrop.date = Number(new Date());
+    user.items.lastDrop.count += 1;
+
     if (analytics && moment().diff(user.auth.timestamps.created, 'days') < 7) {
       analytics.track('dropped item', {
         uuid: user._id,
@@ -154,10 +164,15 @@ export default function randomDrop (user, options, req = {}, analytics) {
         category: 'behavior',
         headers: req.headers,
       });
-    }
 
-    user._tmp.drop = drop;
-    user.items.lastDrop.date = Number(new Date());
-    user.items.lastDrop.count += 1;
+      if (user.items.lastDrop.count === maxDropCount) {
+        analytics.track('drop cap reached', {
+          uuid: user._id,
+          dropCap: maxDropCount,
+          category: 'behavior',
+          headers: req.headers,
+        });
+      }
+    }
   }
 }

@@ -5,7 +5,7 @@ export default {
 
   currentSeason: 'Closed',
 
-  dateRange: { start: '2019-09-24', end: '2019-10-31' },
+  dateRange: { start: '2020-06-17', end: '2020-07-31' },
 
   availableSets: [
   ],
@@ -19,5 +19,5 @@ export default {
   availableQuests: [
   ],
 
-  featuredSet: 'fall2018AlterEgoSet',
+  featuredSet: 'summer2019WaterLilyMageSet',
 };

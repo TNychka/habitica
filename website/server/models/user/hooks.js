@@ -21,7 +21,7 @@ schema.plugin(baseModel, {
   // noSet is not used as updating uses a whitelist and creating only accepts
   // specific params (password, email, username, ...)
   noSet: [],
-  private: ['auth.local.hashed_password', 'auth.local.passwordHashMethod', 'auth.local.salt', '_cronSignature', '_ABtests'],
+  private: ['auth.local.hashed_password', 'auth.local.passwordHashMethod', 'auth.local.salt', '_cronSignature', '_ABtests', 'secret'],
   toJSONTransform: function userToJSON (plainObj, originalDoc) {
     plainObj._tmp = originalDoc._tmp; // be sure to send down drop notifs
 
@@ -44,7 +44,6 @@ function _populateDefaultTasks (user, taskTypes) {
   let defaultsData;
   if (user.registeredThrough === 'habitica-android' || user.registeredThrough === 'habitica-ios') {
     defaultsData = common.content.userDefaultsMobile;
-    user.flags.welcomed = true;
   } else {
     defaultsData = common.content.userDefaults;
   }
@@ -132,10 +131,10 @@ function _setUpNewUser (user) {
   user.items.quests.dustbunnies = 1;
   user.purchased.background.violet = true;
   user.preferences.background = 'violet';
-  if (moment().isBefore('2020-02-02')) {
-    user.achievements.habitBirthdays = 1;
-    user.items.gear.owned.armor_special_birthday = true;
-    user.items.gear.equipped.armor = 'armor_special_birthday';
+  if (moment().isBefore('2020-08-03')) {
+    user.migration = '20200731_naming_day';
+    user.achievements.habiticaDays = 1;
+    user.items.mounts['Gryphon-RoyalPurple'] = true;
     user.items.food = {
       Cake_Skeleton: 1,
       Cake_Base: 1,

@@ -95,7 +95,17 @@ export const TaskSchema = new Schema({
     validate: [v => validator.isUUID(v), 'Invalid uuid for task tags.'],
   }],
   // redness or cost for rewards Required because it must be settable (for rewards)
-  value: { $type: Number, default: 0, required: true },
+  value: {
+    $type: Number,
+    default: 0,
+    required: true,
+    validate: {
+      validator (value) {
+        return this.type === 'reward' ? value >= 0 : true;
+      },
+      msg: 'Reward cost should be a positive number or 0.',
+    },
+  },
   priority: {
     $type: Number,
     default: 1,
@@ -117,17 +127,17 @@ export const TaskSchema = new Schema({
   },
 
   group: {
-    id: { $type: String, ref: 'Group', validate: [v => validator.isUUID(v), 'Invalid uuid for task group.'] },
+    id: { $type: String, ref: 'Group', validate: [v => validator.isUUID(v), 'Invalid uuid for group task.'] },
     broken: { $type: String, enum: ['GROUP_DELETED', 'TASK_DELETED', 'UNSUBSCRIBED'] },
-    assignedUsers: [{ $type: String, ref: 'User', validate: [v => validator.isUUID(v), 'Invalid uuid for task group user.'] }],
+    assignedUsers: [{ $type: String, ref: 'User', validate: [v => validator.isUUID(v), 'Invalid uuid for group assigned user.'] }],
     assignedDate: { $type: Date },
-    claimedUsers: [{ $type: String, ref: 'User', validate: [v => validator.isUUID(v), 'Invalid uuid.'] }],
-    taskId: { $type: String, ref: 'Task', validate: [v => validator.isUUID(v), 'Invalid uuid.'] },
+    assigningUsername: { $type: String },
+    taskId: { $type: String, ref: 'Task', validate: [v => validator.isUUID(v), 'Invalid uuid for group task.'] },
     approval: {
       required: { $type: Boolean, default: false },
       approved: { $type: Boolean, default: false },
       dateApproved: { $type: Date },
-      approvingUser: { $type: String, ref: 'User', validate: [v => validator.isUUID(v), 'Invalid uuid task group approvingUser.'] },
+      approvingUser: { $type: String, ref: 'User', validate: [v => validator.isUUID(v), 'Invalid uuid for group approving user.'] },
       requested: { $type: Boolean, default: false },
       requestedDate: { $type: Date },
     },
@@ -136,7 +146,7 @@ export const TaskSchema = new Schema({
       enum: _.values(SHARED_COMPLETION),
       default: SHARED_COMPLETION.single,
     },
-    managerNotes: { $type: String, default: '' },
+    managerNotes: { $type: String },
   },
 
   reminders: [reminderSchema],
@@ -202,13 +212,15 @@ TaskSchema.statics.findMultipleByIdOrAlias = async function findByIdOrAlias (
   userId,
   additionalQueries = {},
 ) {
-  if (!identifiers) throw new Error('Task identifier is a required argument');
+  if (!identifiers || !Array.isArray(identifiers)) throw new Error('Task identifiers is a required array argument');
   if (!userId) throw new Error('User identifier is a required argument');
 
   const query = _.cloneDeep(additionalQueries);
   query.userId = userId;
+
   const ids = [];
   const aliases = [];
+
   identifiers.forEach(identifier => {
     if (validator.isUUID(String(identifier))) {
       ids.push(identifier);
@@ -216,13 +228,15 @@ TaskSchema.statics.findMultipleByIdOrAlias = async function findByIdOrAlias (
       aliases.push(identifier);
     }
   });
+
   query.$or = [
     { _id: { $in: ids } },
     { alias: { $in: aliases } },
   ];
-  const task = await this.find(query).exec();
 
-  return task;
+  const tasks = await this.find(query).exec();
+
+  return tasks;
 };
 
 // Sanitize user tasks linked to a challenge
@@ -232,6 +246,16 @@ TaskSchema.statics.sanitizeUserChallengeTask = function sanitizeUserChallengeTas
 
   return _.pick(initialSanitization, [
     'streak', 'checklist', 'attribute', 'reminders',
+    'tags', 'notes', 'collapseChecklist',
+    'alias', 'yesterDaily', 'counterDown', 'counterUp',
+  ]);
+};
+
+TaskSchema.statics.sanitizeUserGroupTask = function sanitizeUserGroupTask (taskObj) {
+  const initialSanitization = this.sanitize(taskObj);
+
+  return _.pick(initialSanitization, [
+    'streak', 'attribute', 'reminders',
     'tags', 'notes', 'collapseChecklist',
     'alias', 'yesterDaily', 'counterDown', 'counterUp',
   ]);
@@ -249,10 +273,11 @@ TaskSchema.statics.sanitizeReminder = function sanitizeReminder (reminderObj) {
   return reminderObj;
 };
 
+// NOTE: this is used for group tasks as well
 TaskSchema.methods.scoreChallengeTask = async function scoreChallengeTask (delta, direction) {
   const chalTask = this;
 
-  chalTask.value += delta;
+  if (chalTask.type !== 'reward') chalTask.value += delta;
 
   if (chalTask.type === 'habit' || chalTask.type === 'daily') {
     // Add only one history entry per day
@@ -372,9 +397,9 @@ export const DailySchema = new Schema(_.defaults({
   },
   streak: { $type: Number, default: 0 },
   // Days of the month that the daily should repeat on
-  daysOfMonth: { $type: [Number], default: [] },
+  daysOfMonth: { $type: [Number], default: () => [] },
   // Weeks of the month that the daily should repeat on
-  weeksOfMonth: { $type: [Number], default: [] },
+  weeksOfMonth: { $type: [Number], default: () => [] },
   isDue: { $type: Boolean },
   nextDue: [{ $type: String }],
   yesterDaily: { $type: Boolean, default: true, required: true },

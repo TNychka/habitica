@@ -1,5 +1,3 @@
-import moment from 'moment';
-
 // Magic Hatching Potions are configured like this:
 // type: 'premiumHatchingPotion',  // note no "s" at the end
 // path: 'premiumHatchingPotions.Rainbow',
@@ -12,11 +10,11 @@ const featuredItems = {
       },
       {
         type: 'hatchingPotions',
-        path: 'hatchingPotions.Golden',
+        path: 'hatchingPotions.Shade',
       },
       {
         type: 'eggs',
-        path: 'eggs.Wolf',
+        path: 'eggs.TigerCub',
       },
       {
         type: 'food',
@@ -44,19 +42,19 @@ const featuredItems = {
     return [
       {
         type: 'quests',
-        path: 'quests.badger',
+        path: 'quests.snail',
       },
       {
         type: 'quests',
-        path: 'quests.ferret',
+        path: 'quests.alligator',
       },
       {
         type: 'quests',
-        path: 'quests.sloth',
+        path: 'quests.fluorite',
       },
     ];
   },
-  seasonal: 'winter2019Warrior',
+  seasonal: 'summer2019Warrior',
   timeTravelers: [
     // TODO
   ],

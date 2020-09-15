@@ -212,7 +212,7 @@
               'active': $route.path.startsWith('/group-plans')}"
           >
             <div
-              v-if="groupPlans.length > 0"
+              v-if="groupPlans && groupPlans.length > 0"
               class="chevron rotate"
               @click="dropdownMobile($event)"
             >
@@ -323,7 +323,7 @@
               </router-link>
               <a
                 class="topbar-dropdown-item dropdown-item"
-                href="https://trello.com/c/odmhIqyW/440-read-first-table-of-contents"
+                href="https://docs.google.com/forms/d/e/1FAIpQLScPhrwq_7P1C6PTrI3lbvTsvqGyTNnGzp1ugi1Ml0PFee_p5g/viewform?usp=sf_link"
                 target="_blank"
               >{{ $t('requestAF') }}</a>
               <a
@@ -674,6 +674,10 @@
     }
   }
 
+  a.item-with-icon:focus {
+    outline: none;
+  }
+
   .menu-icon {
     margin-left: 24px;
   }
@@ -757,7 +761,7 @@ export default {
     ...mapState({
       user: 'user.data',
       userHourglasses: 'user.data.purchased.plan.consecutive.trinkets',
-      groupPlans: 'groupPlans',
+      groupPlans: 'groupPlans.data',
       modalStack: 'modalStack',
     }),
     navbarZIndexClass () {
@@ -785,7 +789,7 @@ export default {
       this.isUserDropdownOpen = !this.isUserDropdownOpen;
     },
     async getUserGroupPlans () {
-      this.$store.state.groupPlans = await this.$store.dispatch('guilds:getGroupPlans');
+      await this.$store.dispatch('guilds:getGroupPlans');
     },
     openPartyModal () {
       this.$root.$emit('bv::show::modal', 'create-party-modal');

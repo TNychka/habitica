@@ -499,6 +499,45 @@ describe('PUT /tasks/:id', () => {
     });
   });
 
+  context('monthly dailys', () => {
+    let monthly;
+
+    beforeEach(async () => {
+      const date1 = moment.utc('2020-07-01').toDate();
+      monthly = await user.post('/tasks/user', {
+        text: 'test monthly',
+        type: 'daily',
+        frequency: 'monthly',
+        startDate: date1,
+        daysOfMonth: [date1.getDate()],
+      });
+    });
+
+    it('updates days of month when start date updated', async () => {
+      const date2 = moment.utc('2020-07-01').toDate();
+      const savedMonthly = await user.put(`/tasks/${monthly._id}`, {
+        startDate: date2,
+      });
+
+      expect(savedMonthly.daysOfMonth).to.deep.equal([moment(date2).date()]);
+    });
+
+    it('updates next due when start date updated', async () => {
+      const date2 = moment.utc('2022-07-01').toDate();
+      const savedMonthly = await user.put(`/tasks/${monthly._id}`, {
+        startDate: date2,
+      });
+
+      expect(savedMonthly.nextDue.length).to.eql(6);
+      expect(moment(savedMonthly.nextDue[0]).toDate()).to.eql(moment.utc('2022-08-01').toDate());
+      expect(moment(savedMonthly.nextDue[1]).toDate()).to.eql(moment.utc('2022-09-01').toDate());
+      expect(moment(savedMonthly.nextDue[2]).toDate()).to.eql(moment.utc('2022-10-01').toDate());
+      expect(moment(savedMonthly.nextDue[3]).toDate()).to.eql(moment.utc('2022-11-01').toDate());
+      expect(moment(savedMonthly.nextDue[4]).toDate()).to.eql(moment.utc('2022-12-01').toDate());
+      expect(moment(savedMonthly.nextDue[5]).toDate()).to.eql(moment.utc('2023-01-01').toDate());
+    });
+  });
+
   context('rewards', () => {
     let reward;
 
@@ -529,6 +568,16 @@ describe('PUT /tasks/:id', () => {
       });
 
       expect(savedReward.value).to.eql(100);
+    });
+
+    it('returns an error if reward value is a negative number', async () => {
+      await expect(user.put(`/tasks/${reward._id}`, {
+        value: -10,
+      })).to.eventually.be.rejected.and.eql({
+        code: 400,
+        error: 'BadRequest',
+        message: 'reward validation failed',
+      });
     });
   });
 });

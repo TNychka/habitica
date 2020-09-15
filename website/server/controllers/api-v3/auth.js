@@ -160,14 +160,17 @@ api.redirectApple = {
     }
     let url = `/static/apple-redirect?code=${req.body.code}`;
     if (req.body.user) {
-      const { name } = JSON.parse(req.body.user);
-      url += `&name=${name}`;
+      const parsedBody = JSON.parse(req.body.user);
+      if (parsedBody && parsedBody.name) {
+        url += `&name=${parsedBody.name.firstName} ${parsedBody.name.lastName}`;
+      }
     }
     return res.redirect(303, url);
   },
 };
 
 // Called as a callback by Apple. Internal route
+// Can be passed `code` and `name` as query parameters
 api.loginApple = {
   method: 'GET',
   middlewares: [authWithHeaders({

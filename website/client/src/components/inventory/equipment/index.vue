@@ -145,7 +145,20 @@
         <div slot="drawer-header">
           <div class="drawer-tab-container">
             <div class="clearfix">
-
+              <div class="drawer-tab float-left">
+                <a
+                  class="drawer-tab-text"
+                  :class="{'drawer-tab-text-active': costumeMode}"
+                  @click="selectDrawerTab('costume')"
+                >{{ $t('costume') }}</a>
+              </div>
+              <toggle-switch
+                class="float-right align-with-tab"
+                :label="$t(costumeMode ? 'useCostume' : 'autoEquipBattleGear')"
+                :checked="user.preferences[drawerPreference]"
+                :hover-text="$t(`${drawerPreference}PopoverText`)"
+                @change="changeDrawerPreference"
+              />
             </div>
           </div>
         </div>
@@ -195,10 +208,10 @@
         :class="group.key"
       >
         <!-- eslint-enable vue/no-use-v-if-with-v-for -->
-        <h2 class="mb-3">
+        <h2 class="d-flex align-items-center mb-3">
           {{ group.label }}
           <span
-            class="badge badge-pill badge-default"
+            class="badge badge-pill badge-default ml-2"
           >{{ items[group.key].length }}</span>
         </h2>
         <itemRows
