@@ -106,7 +106,8 @@ async function castUserSpell (res, req, party, partyMembers, targetId, user, spe
     if (!party) throw new NotFound(res.t('partyNotFound'));
     partyMembers = await User // eslint-disable-line no-param-reassign
       .findOne({ _id: targetId, 'party._id': party._id })
-      .select(partyMembersFields)
+      // We need all fields due to adding debuf spell to pinned items of target of the spell
+      // .select(partyMembersFields)
       .exec();
   }
 

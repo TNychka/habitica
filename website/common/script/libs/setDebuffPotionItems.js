@@ -23,6 +23,8 @@ export default function setDebuffPotionItems (user) {
     if (!isUserHaveDebuffInPinnedItems) {
       user.pinnedItems.push(...debuffPotionItems);
     }
+  } else {
+    user.pinnedItems = user.pinnedItems.filter(item => item.type !== 'debuffPotion');
   }
 
   return user;

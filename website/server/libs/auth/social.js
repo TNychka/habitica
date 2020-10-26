@@ -1,4 +1,7 @@
 import passport from 'passport';
+import jwt from 'jsonwebtoken';
+import AppleAuth from 'apple-auth';
+import nconf from 'nconf';
 import common from '../../../common';
 import { BadRequest } from '../errors';
 import logger from '../logger';
@@ -10,6 +13,7 @@ import { appleProfile } from './apple';
 import { model as User } from '../../models/user';
 import { model as EmailUnsubscription } from '../../models/emailUnsubscription';
 import { sendTxn as sendTxnEmail } from '../email';
+import logger from '../logger';
 
 function _passportProfile (network, accessToken) {
   return new Promise((resolve, reject) => {
@@ -21,6 +25,34 @@ function _passportProfile (network, accessToken) {
       }
     });
   });
+}
+
+const applePrivateKey = nconf.get('APPLE_AUTH_PRIVATE_KEY');
+const applePublicKey = nconf.get('APPLE_AUTH_PUBLIC_KEY');
+
+const auth = new AppleAuth(JSON.stringify({
+  client_id: nconf.get('APPLE_AUTH_CLIENT_ID'), // eslint-disable-line camelcase
+  team_id: nconf.get('APPLE_TEAM_ID'), // eslint-disable-line camelcase
+  key_id: nconf.get('APPLE_AUTH_KEY_ID'), // eslint-disable-line camelcase
+  redirect_uri: `${nconf.get('BASE_URL')}/api/v4/user/auth/apple`, // eslint-disable-line camelcase
+  scope: 'name email',
+}), applePrivateKey.toString(), 'text');
+
+async function _appleProfile (req) {
+  let idToken = {};
+  const code = req.body.code ? req.body.code : req.query.code;
+  const passedToken = req.body.id_token ? req.body.id_token : req.query.id_token;
+  if (code) {
+    const response = await auth.accessToken(code);
+    idToken = jwt.decode(response.id_token);
+  } else if (passedToken) {
+    idToken = await jwt.verify(passedToken, applePublicKey, { algorithms: ['RS256'] });
+  }
+  return {
+    id: idToken.sub,
+    emails: [{ value: idToken.email }],
+    name: idToken.name || req.body.name,
+  };
 }
 
 export async function loginSocial (req, res) { // eslint-disable-line import/prefer-default-export
@@ -47,6 +79,7 @@ export async function loginSocial (req, res) { // eslint-disable-line import/pre
 
   // User already signed up
   if (user) {
+    logger.info(`FOUND USER ${user._id}`);
     return loginRes(user, req, res);
   }
 

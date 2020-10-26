@@ -761,7 +761,7 @@ api.updateTask = {
  */
 api.scoreTask = {
   method: 'POST',
-  url: '/tasks/:taskId/score/:direction',
+  url: '/tasks/:taskId/score/:direction/:yesterdaily?',
   middlewares: [authWithHeaders()],
   async handler (req, res) {
     // Parameters are validated in scoreTasks

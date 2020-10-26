@@ -69,7 +69,7 @@
             <div
               v-if="!isUser"
               class="svg-icon lock"
-              :class="controlClass.icon"
+              :class="controlClass.checkbox"
               v-html="icons.lock"
             ></div>
             <div

@@ -23,6 +23,22 @@ const featuredItems = {
     ];
   },
   quests () {
+    if (moment().isBefore('2020-04-02')) {
+      return [
+        {
+          type: 'bundles',
+          path: 'bundles.hugabug',
+        },
+        {
+          type: 'quests',
+          path: 'quests.velociraptor',
+        },
+        {
+          type: 'quests',
+          path: 'quests.taskwoodsTerror1',
+        },
+      ];
+    }
     return [
       {
         type: 'quests',

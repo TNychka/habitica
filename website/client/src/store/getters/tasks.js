@@ -184,7 +184,6 @@ export function getTaskClasses (store) {
             bg: _nonInteractive(task) ? `task-${color}-control-bg-noninteractive` : `task-${color}-control-bg`,
             checkbox: `task-${color}-control-checkbox`,
             inner: `task-${color}-control-inner-daily-todo`,
-            icon: `task-${color}-control-icon`,
           };
         } if (type === 'reward') {
           return {
